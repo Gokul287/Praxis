@@ -152,6 +152,10 @@ AVAILABLE_COMMANDS = [
 
 So agents discovering the action space via the observation see the new tools without docs.
 
+Issue #2 also requires these commands to be advertised immediately on baseline observations,
+even before the memory hook rewrites `investigation_result`; `memory_active=false` and
+`saved_findings_count=0` are the safe defaults until cutoff logic is active.
+
 ---
 
 ## 7. Determinism + reset
