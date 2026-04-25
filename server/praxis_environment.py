@@ -39,7 +39,7 @@ from praxis_env.memory import PraxisMemory
 from praxis_env.scenarios import get_scenario, list_tasks
 from praxis_env.scenarios.base import BaseScenario
 from server.command_parser import parse_command
-from server.reward import MAX_REWARD, MIN_REWARD, RewardEngine
+from server.reward import MAX_REWARD, MIN_REWARD, RewardEngine, compute_task_score
 
 logger = logging.getLogger(__name__)
 
@@ -336,6 +336,15 @@ class PraxisEnvironment:
         state = self._scenario.get_state()
         state.memory_active = self._memory.is_active(self._scenario._step_count)
         state.session_id = self._session_id
+        # Once the scenario is terminal we freeze the ADR-20 outcome x
+        # efficiency score on the state snapshot so /state callers (the
+        # baseline inference script + judges) see a stable final number.
+        # Mid-episode it stays None so callers can distinguish "running"
+        # from "lost" (which would otherwise both be clamped to 0.01).
+        if self._scenario.is_done():
+            state.final_score = compute_task_score(
+                state, max_steps=self._scenario.MAX_STEPS
+            )
         return state
 
     def list_tasks(self) -> list[str]:

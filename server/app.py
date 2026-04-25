@@ -313,6 +313,7 @@ def create_app() -> FastAPI:
                 "cumulative_reward": s.cumulative_reward,
                 "session_id": session_id,
                 "memory_active": s.memory_active,
+                "final_score": s.final_score,
             }
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))

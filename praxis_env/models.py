@@ -173,6 +173,10 @@ class PraxisState(BaseModel):
         incident_resolved:      True when the incident has been correctly remediated
         root_cause_identified:  True when agent has issued a correct diagnose command
         cumulative_reward:      Sum of rewards so far (for monitoring only)
+        final_score:            ADR-20 outcome x efficiency score, populated
+                                only once the episode is terminal. ``None`` mid-
+                                episode so callers can distinguish "in flight"
+                                from "score = clamp_reward(0)".
     """
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
@@ -185,6 +189,7 @@ class PraxisState(BaseModel):
     cumulative_reward: float = 0.01
     session_id: str = ""
     memory_active: bool = False
+    final_score: float | None = None
 
 
 # ────────────────────────────────────────────────────────────────────────────

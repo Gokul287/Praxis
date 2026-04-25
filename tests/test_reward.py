@@ -9,12 +9,14 @@ import random
 
 import pytest
 
+from praxis_env.models import PraxisState
 from server.reward import (
     DEFAULT_REWARD_POLICIES,
     _MEMORY_EVENTS,
     RewardEngine,
     RewardPolicy,
     clamp_reward,
+    compute_task_score,
 )
 
 
@@ -158,6 +160,60 @@ def test_remediation_requires_diagnosis(task_name: str):
     assert result.breakdown.remediation_reward == pytest.approx(0.0)
     assert result.breakdown.total_unclamped == pytest.approx(0.0)
     assert result.reward == pytest.approx(0.01)
+
+
+def _make_state(
+    *,
+    incident_resolved: bool = True,
+    root_cause_identified: bool = True,
+    cumulative_reward: float = 0.6,
+    step_count: int = 4,
+) -> PraxisState:
+    return PraxisState(
+        episode_id="test-episode",
+        step_count=step_count,
+        task_name="single-service-alert",
+        incident_resolved=incident_resolved,
+        root_cause_identified=root_cause_identified,
+        cumulative_reward=cumulative_reward,
+    )
+
+
+def test_score_formula_outcome_times_efficiency_targeted_solve() -> None:
+    """ADR-20: a 4-step solve on a 20-step task earns cumulative_reward * 0.80."""
+    state = _make_state(cumulative_reward=0.6, step_count=4)
+    score = compute_task_score(state, max_steps=20)
+    assert score == pytest.approx(0.48, abs=1e-9)
+
+
+def test_score_formula_outcome_gate_zero_when_unresolved() -> None:
+    state = _make_state(incident_resolved=False, cumulative_reward=0.6, step_count=4)
+    assert compute_task_score(state, max_steps=20) == pytest.approx(0.01)
+
+
+def test_score_formula_outcome_gate_zero_when_root_cause_missing() -> None:
+    state = _make_state(
+        root_cause_identified=False, cumulative_reward=0.6, step_count=4
+    )
+    assert compute_task_score(state, max_steps=20) == pytest.approx(0.01)
+
+
+def test_score_formula_efficiency_zero_when_steps_exceed_budget() -> None:
+    state = _make_state(cumulative_reward=0.6, step_count=20)
+    assert compute_task_score(state, max_steps=20) == pytest.approx(0.01)
+
+
+def test_score_formula_targeted_run_strictly_beats_wandering_run() -> None:
+    fast = _make_state(cumulative_reward=0.6, step_count=4)
+    slow = _make_state(cumulative_reward=0.6, step_count=18)
+    assert compute_task_score(fast, max_steps=20) > compute_task_score(
+        slow, max_steps=20
+    )
+
+
+def test_score_formula_clamps_into_judge_safe_open_interval() -> None:
+    huge = _make_state(cumulative_reward=5.0, step_count=1)
+    assert compute_task_score(huge, max_steps=20) == pytest.approx(0.99)
 
 
 def test_random_sequences_remain_clamped():

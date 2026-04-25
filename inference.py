@@ -158,7 +158,21 @@ def clamp_output_score(score: float) -> float:
     return max(OUTPUT_MIN_SCORE, min(OUTPUT_MAX_SCORE, float(score)))
 
 
-def compute_task_score(rewards: list[float]) -> float:
+def compute_task_score(
+    rewards: list[float],
+    *,
+    final_score: float | None = None,
+) -> float:
+    """
+    Final episode score for the [END] line.
+
+    Prefers the server-side ADR-20 outcome x efficiency score (returned as
+    ``state.final_score`` once the episode is terminal). Falls back to the
+    legacy mean-of-rewards score only when the server didn't surface a
+    final_score (e.g. the episode crashed before any /state call).
+    """
+    if final_score is not None:
+        return clamp_output_score(float(final_score))
     if not rewards:
         return OUTPUT_MIN_SCORE
     return clamp_output_score(sum(rewards) / len(rewards))
@@ -339,6 +353,9 @@ async def run_episode(task_name: str, client: OpenAI | None) -> EpisodeResult:
     history: list[str] = []
     use_model = True
     emitted_step_numbers: set[int] = set()
+    final_score_from_server: float | None = None
+    incident_resolved = False
+    root_cause_identified = False
 
     print(render_start_line(task_name, BENCHMARK_NAME, MODEL_NAME), flush=True)
 
@@ -406,17 +423,28 @@ async def run_episode(task_name: str, client: OpenAI | None) -> EpisodeResult:
         encountered_fatal = True
         print(f"[ERROR] Failed to start episode '{task_name}': {exc}")
     finally:
+        # Pull the terminal /state snapshot before closing the client so the
+        # [END] line can report the ADR-20 outcome x efficiency score that
+        # the server computes (rather than a stale local mean of rewards).
+        try:
+            final_state = await env.get_state()
+            final_score_from_server = final_state.final_score
+            incident_resolved = bool(final_state.incident_resolved)
+            root_cause_identified = bool(final_state.root_cause_identified)
+        except Exception:
+            pass
         try:
             await env.close()
         except Exception:
             pass
 
-    total_reward = sum(rewards)
-    task_score = compute_task_score(rewards)
+    task_score = compute_task_score(rewards, final_score=final_score_from_server)
     success = bool(
         (not encountered_fatal)
         and steps_taken > 0
-        and total_reward >= SUCCESS_SCORE_THRESHOLD
+        and incident_resolved
+        and root_cause_identified
+        and task_score >= SUCCESS_SCORE_THRESHOLD
     )
     print(
         render_end_line(
