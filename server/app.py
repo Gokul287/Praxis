@@ -15,6 +15,9 @@ Endpoints:
 Environment Variables:
     ENABLE_WEB_INTERFACE: "true" to enable OpenEnv web UI (optional)
     LOG_LEVEL: log level — default "INFO"
+    PRAXIS_RATE_LIMIT_DEFAULT: default global limit (default "120/minute")
+    PRAXIS_RATE_LIMIT_STEP: per-IP /step limit (default "60/minute")
+    PRAXIS_RATE_LIMIT_RESET: per-IP /reset limit (default "30/minute")
 """
 
 from __future__ import annotations
@@ -24,9 +27,13 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 
 from praxis_env.models import PraxisAction, PraxisObservation, PraxisState
 from server.praxis_environment import PraxisEnvironment
@@ -41,9 +48,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Global session manager instance ────────────────────────────────────────────
+# ── Global session manager + rate limiter ─────────────────────────────────────
 manager = SessionManager()
 task_catalog = PraxisEnvironment().list_tasks()
+
+DEFAULT_RATE_LIMIT = os.getenv("PRAXIS_RATE_LIMIT_DEFAULT", "120/minute")
+STEP_RATE_LIMIT = os.getenv("PRAXIS_RATE_LIMIT_STEP", "60/minute")
+RESET_RATE_LIMIT = os.getenv("PRAXIS_RATE_LIMIT_RESET", "30/minute")
+
+# slowapi requires a module-level Limiter so the @limiter.limit decorator
+# can be evaluated at route-definition time.
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=[DEFAULT_RATE_LIMIT],
+    headers_enabled=True,
+)
 
 
 # ── Request / Response schemas (Pydantic, for FastAPI validation) ─────────────
@@ -86,6 +105,13 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # ── slowapi wiring ────────────────────────────────────────────────────────
+    # The Limiter must be attached to app.state and the SlowAPIMiddleware
+    # registered so 429 responses include a valid Retry-After header.
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
     # CORS — allow judges and web UI to call from any origin
     app.add_middleware(
         CORSMiddleware,
@@ -96,14 +122,14 @@ def create_app() -> FastAPI:
 
     # ── Routes ────────────────────────────────────────────────────────────────
 
-    def _require_session(request: Request) -> tuple[str, Session]:
+    async def _require_session(request: Request) -> tuple[str, Session]:
         session_id = request.headers.get("x-session-id")
         if not session_id:
             raise HTTPException(status_code=400, detail="Missing X-Session-Id header")
-        session = manager.get(session_id)
+        session = await manager.get(session_id)
         if session is None:
             raise HTTPException(status_code=400, detail="No active session for that id")
-        manager.touch(session_id)
+        await manager.touch(session_id)
         return session_id, session
 
     @app.get("/health")
@@ -189,7 +215,8 @@ def create_app() -> FastAPI:
         }
 
     @app.post("/reset")
-    async def reset(request: Request) -> dict[str, Any]:
+    @limiter.limit(RESET_RATE_LIMIT)
+    async def reset(request: Request, response: Response) -> dict[str, Any]:
         """
         Start a new episode.
 
@@ -223,7 +250,7 @@ def create_app() -> FastAPI:
             pass  # no body or invalid JSON — use default task
 
         try:
-            allocation = manager.allocate(task_name=task_name, seed=seed)
+            allocation = await manager.allocate(task_name=task_name, seed=seed)
             obs_dict = PraxisEnvironment._obs_to_dict(allocation.observation)
             # Return both flat fields AND wrapped observation key
             # so both strict and lenient judges pass
@@ -240,7 +267,10 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=500, detail=f"reset() error: {e}")
 
     @app.post("/step")
-    async def step(request: Request, payload: StepRequest) -> dict[str, Any]:
+    @limiter.limit(STEP_RATE_LIMIT)
+    async def step(
+        request: Request, response: Response, payload: StepRequest
+    ) -> dict[str, Any]:
         """
         Execute one action.
 
@@ -248,9 +278,11 @@ def create_app() -> FastAPI:
         Returns: {observation, reward, done, info}
         """
         try:
-            _, session = _require_session(request)
+            _, session = await _require_session(request)
             action = PraxisAction(command=payload.command)
-            with session.lock:
+            # Per-session lock keeps step ordering deterministic when the
+            # same client multiplexes multiple in-flight /step calls.
+            async with session.lock:
                 result = session.env.step(action)
             return result
         except HTTPException as e:
@@ -269,8 +301,8 @@ def create_app() -> FastAPI:
         Returns: PraxisState as JSON
         """
         try:
-            session_id, session = _require_session(request)
-            with session.lock:
+            session_id, session = await _require_session(request)
+            async with session.lock:
                 s = session.env.state()
             return {
                 "episode_id": s.episode_id,
@@ -296,8 +328,10 @@ def create_app() -> FastAPI:
 def main() -> None:
     """Run the API server via uvicorn.
 
-    Exposed as the `server` project script so validators and local runners
-    can start the environment without custom commands.
+    Exposed as the ``server`` project script so validators and local runners
+    can start the environment without custom commands. The Dockerfile uses
+    ``uvicorn server.app:app`` directly — this entry point exists only for
+    ``pip install -e . && server`` style invocations.
     """
     import uvicorn
 
@@ -313,7 +347,3 @@ def main() -> None:
 
 # ── ASGI app (imported by uvicorn and Dockerfile CMD) ─────────────────────────
 app = create_app()
-
-
-if __name__ == "__main__":
-    main()
