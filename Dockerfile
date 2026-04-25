@@ -7,9 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Copy only the runtime sources needed to build and run Praxis.
-COPY pyproject.toml README.md openenv.yaml /app/
+COPY pyproject.toml README.md openenv.yaml LICENSE-3rd-party /app/
 COPY praxis_env /app/praxis_env
 COPY server /app/server
+COPY data /app/data
 COPY inference.py /app/inference.py
 
 RUN pip install --upgrade pip && pip install .
