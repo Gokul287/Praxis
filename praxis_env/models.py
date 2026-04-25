@@ -101,6 +101,9 @@ class PraxisAction(BaseModel):
         scale_resource service=<name> resource=<type> [value=<N>]
         kill_query service=<name> query_id=<id>
         escalate reason=<text>
+        save_finding key=<key> value=<finding>
+        recall_memory
+        recall_memory key=<key>
 
     Example:
         PraxisAction(command="query_logs service=auth timerange=5m")
