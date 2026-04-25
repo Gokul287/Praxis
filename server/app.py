@@ -37,6 +37,7 @@ from slowapi.util import get_remote_address
 
 from praxis_env.artifacts import load_default_store
 from praxis_env.models import PraxisAction, PraxisObservation, PraxisState
+from praxis_env.rubrics import default_rubric_bundle
 from praxis_env.scenarios import SCENARIO_REGISTRY
 from server.praxis_environment import PraxisEnvironment
 from server.session_manager import Session, SessionManager
@@ -95,14 +96,32 @@ def _tasks_metadata() -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     for task_name in task_catalog:
         scenario_cls = SCENARIO_REGISTRY[task_name]
-        entries.append(
-            {
-                "name": task_name,
-                "difficulty": _TASK_DIFFICULTY.get(task_name, "medium"),
-                "max_steps": int(getattr(scenario_cls, "MAX_STEPS", 15)),
-            }
-        )
+        entry: dict[str, Any] = {
+            "name": task_name,
+            "difficulty": _TASK_DIFFICULTY.get(task_name, "medium"),
+            "max_steps": int(getattr(scenario_cls, "MAX_STEPS", 15)),
+        }
+        if task_name == "cascading-platform-failure":
+            entry["phases"] = [
+                "Intake",
+                "Exploration",
+                "Planning",
+                "Execution",
+                "Disturbance",
+                "Recovery",
+                "Completion",
+                "Reflection",
+            ]
+        entries.append(entry)
     return entries
+
+
+def _rubrics_metadata() -> list[dict[str, Any]]:
+    """Return the default rubric bundle advertised by /step info.breakdown."""
+    return [
+        {"name": type(rubric).__name__, "weight": rubric.weight}
+        for rubric in default_rubric_bundle()
+    ]
 
 
 DEFAULT_RATE_LIMIT = os.getenv("PRAXIS_RATE_LIMIT_DEFAULT", "120/minute")
@@ -219,6 +238,7 @@ def create_app() -> FastAPI:
                 "mcp": "/mcp",
             },
             "data_sources": _data_sources_metadata(),
+            "rubrics": _rubrics_metadata(),
         }
 
     @app.get("/schema")
@@ -358,6 +378,11 @@ def create_app() -> FastAPI:
                 "session_id": session_id,
                 "memory_active": s.memory_active,
                 "final_score": s.final_score,
+                "mission_id": s.mission_id,
+                "phase": s.phase,
+                "plan": s.plan,
+                "checkpoints_completed": s.checkpoints_completed,
+                "artifact_attribution": s.artifact_attribution,
             }
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))

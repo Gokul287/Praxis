@@ -42,6 +42,23 @@ def test_state_final_score_is_none_until_episode_done() -> None:
     assert state["final_score"] is None
 
 
+def test_state_endpoint_exposes_mission_metadata() -> None:
+    reset_response = client.post(
+        "/reset", json={"task_name": "cascading-platform-failure", "seed": 42}
+    )
+    assert reset_response.status_code == 200
+    session_id = reset_response.json()["session_id"]
+    headers = {"X-Session-Id": session_id}
+
+    state = client.get("/state", headers=headers).json()
+    assert state["mission_id"] == "mission-0000002a"
+    assert state["phase"] == "intake"
+    assert state["plan"] == []
+    assert state["checkpoints_completed"] == []
+    assert state["artifact_attribution"]
+    assert any("praxis:fixtures" in line for line in state["artifact_attribution"])
+
+
 def test_state_final_score_uses_outcome_times_efficiency() -> None:
     reset_response = client.post("/reset", json={"task_name": "single-service-alert"})
     assert reset_response.status_code == 200

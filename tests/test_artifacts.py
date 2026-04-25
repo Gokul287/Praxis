@@ -326,3 +326,29 @@ class TestMetadataEndpoint:
 
         assert set(tasks) == set(PraxisEnvironment().list_tasks())
         assert tasks["cascading-platform-failure"]["max_steps"] == 150
+        assert tasks["cascading-platform-failure"]["phases"] == [
+            "Intake",
+            "Exploration",
+            "Planning",
+            "Execution",
+            "Disturbance",
+            "Recovery",
+            "Completion",
+            "Reflection",
+        ]
+
+    def test_metadata_lists_rubrics(self) -> None:
+        from server.app import app
+
+        with TestClient(app) as client:
+            r = client.get("/metadata")
+            assert r.status_code == 200
+            rubrics = r.json()["rubrics"]
+
+        assert {item["name"] for item in rubrics} == {
+            "PlanningRubric",
+            "MemoryRubric",
+            "RecoveryRubric",
+            "TerminalRubric",
+        }
+        assert sum(item["weight"] for item in rubrics) == 1.0

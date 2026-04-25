@@ -45,6 +45,10 @@ class _FakeAsyncClient:
                         "step_number": 0,
                         "memory_active": False,
                         "saved_findings_count": 0,
+                        "mission_id": "mission-123",
+                        "phase": "intake",
+                        "time_budget": 150,
+                        "pending_objectives": ["diagnose root causes"],
                     },
                 }
             )
@@ -65,6 +69,10 @@ class _FakeAsyncClient:
                         "step_number": 1,
                         "memory_active": False,
                         "saved_findings_count": 0,
+                        "mission_id": "mission-123",
+                        "phase": "exploration",
+                        "time_budget": 150,
+                        "pending_objectives": ["diagnose root causes"],
                     },
                     "reward": 0.11,
                     "done": False,
@@ -88,6 +96,12 @@ class _FakeAsyncClient:
                     "cumulative_reward": 0.12,
                     "session_id": "session-123",
                     "memory_active": False,
+                    "final_score": None,
+                    "mission_id": "mission-123",
+                    "phase": "exploration",
+                    "plan": ["triage database"],
+                    "checkpoints_completed": ["intake"],
+                    "artifact_attribution": ["praxis:fixtures"],
                 }
             )
         raise AssertionError(f"Unexpected GET path: {path}")
@@ -104,12 +118,17 @@ async def test_client_uses_session_header_for_step_and_state(
     monkeypatch.setattr("praxis_env.client.httpx.AsyncClient", lambda **_: fake)
 
     env = await PraxisEnv.from_url("http://127.0.0.1:7860")
-    _ = await env.reset(task_name="single-service-alert")
-    _ = await env.step(PraxisAction(command="query_logs service=auth timerange=5m"))
-    _ = await env.get_state()
+    obs = await env.reset(task_name="single-service-alert")
+    step = await env.step(PraxisAction(command="query_logs service=auth timerange=5m"))
+    state = await env.get_state()
 
     assert fake.last_step_headers == {"x-session-id": "session-123"}
     assert fake.last_state_headers == {"x-session-id": "session-123"}
+    assert obs.mission_id == "mission-123"
+    assert step.observation.phase == "exploration"
+    assert state.mission_id == "mission-123"
+    assert state.plan == ["triage database"]
+    assert state.artifact_attribution == ["praxis:fixtures"]
 
     await env.close()
     assert fake.closed is True

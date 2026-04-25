@@ -71,18 +71,22 @@ FALLBACK_COMMANDS = {
         "rollback_deploy service=worker",
     ],
     "cascading-platform-failure": [
-        "query_logs service=database timerange=15m",
         "check_metrics service=database metric=connections",
-        "query_logs service=cdn timerange=15m",
         "check_metrics service=cdn metric=tls_handshake_failures",
-        "query_logs service=worker timerange=15m",
         "check_metrics service=worker metric=memory",
+        "check_config service=database",
+        "check_config service=cdn",
+        "check_config service=worker",
         "diagnose root_cause=db_pool_corrupted",
         "diagnose root_cause=cdn_tls_expired",
         "diagnose root_cause=worker_memory_leak",
-        "scale_resource service=database resource=connection_pool",
         "rollback_deploy service=cdn",
+        "scale_resource service=database resource=connection_pool",
         "rollback_deploy service=worker",
+        (
+            "submit_report root_causes=db_pool_corrupted,cdn_tls_expired,"
+            "worker_memory_leak resolution=full_remediation_applied"
+        ),
     ],
 }
 
