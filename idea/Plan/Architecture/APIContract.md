@@ -119,7 +119,7 @@ class PraxisState(BaseModel):
     phase: str | None = None
     plan: list[str] = []                # current plan milestones
     checkpoints_completed: list[str] = []
-    artifact_attribution: str | None = None  # ArtifactStore.attribution() — surfaced in /metadata too (ADR-17)
+    artifact_attribution: list[str] = []  # ArtifactStore.attribution() lines — surfaced in /metadata too (ADR-17, Issue #38)
 ```
 
 ---
@@ -221,10 +221,15 @@ Adds the new tasks and the concurrency flag:
   ],
   "data_sources": [
     {
-      "name": "rootly-logs-dataset",
-      "license": "Apache-2.0",
-      "url": "https://huggingface.co/datasets/Rootly-AI-Labs/logs-dataset",
-      "vendored_at": "data/artifacts/"
+      "name": "praxis-mission-fixtures",
+      "kind": "internal",
+      "root": "data/artifacts",
+      "provenance_prefix": "praxis:fixtures",
+      "attribution": "<ArtifactStore.attribution() string>",
+      "notice": "data/artifacts/NOTICE.md",
+      "license_file": "LICENSE-3rd-party",
+      "artifact_count": 50,
+      "services": ["api", "auth", "cache", "cdn", "database", "dns", "queue", "worker"]
     }
   ],
   "rubrics": [
