@@ -241,7 +241,25 @@ class PraxisEnvironment:
         if self._scenario is None:
             raise RuntimeError("step() called before reset(). Call reset() first.")
 
-        if self._scenario.clamp_reward(self._scenario._cumulative_reward) >= MAX_REWARD:
+        logger.debug("step() → command=%r", action.command)
+
+        # The environment owns step_count and cumulative reward bookkeeping.
+        # Scenarios return domain outcomes without mutating those counters.
+        # Parse command string -> structured ParsedCommand
+        parsed = parse_command(action.command)
+
+        # Score-cap short-circuit: stop runaway reward farming. Planning
+        # and terminal actions (submit_report, escalate, plan/checkpoint/
+        # clarification) are flow-control rather than reward-farming
+        # surfaces, and Mission scenarios *require* submit_report to
+        # flip the resolution gate (Issue #37). Let those through even
+        # at cap so the resolution logic can still fire.
+        _flow_actions = PLANNING_ACTION_TYPES | {"escalate"}
+        if (
+            self._scenario.clamp_reward(self._scenario._cumulative_reward)
+            >= MAX_REWARD
+            and parsed.action_type not in _flow_actions
+        ):
             obs = self._scenario.get_observation()
             obs.step_number = self._scenario._step_count
             return {
@@ -254,12 +272,6 @@ class PraxisEnvironment:
                 },
             }
 
-        logger.debug("step() → command=%r", action.command)
-
-        # The environment owns step_count and cumulative reward bookkeeping.
-        # Scenarios return domain outcomes without mutating those counters.
-        # Parse command string -> structured ParsedCommand
-        parsed = parse_command(action.command)
         current_step = self._scenario._step_count
         reward_event: str | None = None
 
