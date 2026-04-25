@@ -26,11 +26,37 @@ outputs/
 outputs/logs/
 outputs/evals/
 
-# IDE
+# IDE (JetBrains-only; we keep `idea/` as the planning folder)
 .vscode/
 .idea/
-/idea/
 *.sw[po]
+
+# Local-only assets that must NOT be pushed
+# - idea/OpenEnv: full OpenEnv reference clone, only used as a local read-only
+#   pattern source. The team pulls OpenEnv from upstream, not from this repo.
+idea/OpenEnv/
+
+# Local script we use to install Docker in WSL; not part of the env image.
+get-docker.sh
+
+# Local research scaffold inside idea/. Only `idea/Plan/` is the live spec
+# the team needs to close the 21 issues; everything else is private notes.
+idea/agents/
+idea/Architecture/
+idea/Data/
+idea/PROBLEM STATEMENT/
+idea/Pre Validation Script
+idea/Sample Inference Script
+idea/.gitignore
+idea/.gitkeep
+idea/README.md
+idea/Task.md
+
+# Inside idea/Plan/: skip the legacy T01-T14 tracker (superseded by
+# github_issues.md) and any Cursor `.plan.md` artefacts.
+idea/Plan/task.md
+idea/Plan/*.plan.md
+.cursor/plans/
 
 # OS
 .DS_Store

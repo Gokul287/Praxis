@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Plan source of truth
+    url: https://github.com/GunaPalanivel/Praxis/blob/main/idea/Plan/github_issues.md
+    about: All 21 plan-v2.1 issues are defined here; bodies stay in sync with this file.
+  - name: Architecture docs
+    url: https://github.com/GunaPalanivel/Praxis/tree/main/idea/Plan/Architecture
+    about: APIContract / DataFlow / ConcurrencyModel / MemoryModel / RewardPolicy / ScenarioCatalog / SessionLifecycle.

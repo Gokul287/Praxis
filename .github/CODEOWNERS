@@ -1,0 +1,32 @@
+# Praxis CODEOWNERS - implements the lane assignments from
+# idea/Plan/dependency_graph.md and the review policy in
+# idea/Plan/Project/DecisionLog.md ADR-11.
+#
+# Format reminder: rules later in the file override earlier ones,
+# so order = most general -> most specific.
+
+# Default fallback: both leads must approve anything not otherwise routed.
+*                                @GunaPalanivel @Gokul287
+
+# Architect lane
+/server/app.py                   @GunaPalanivel
+/server/praxis_environment.py    @GunaPalanivel
+/praxis_env/models.py            @GunaPalanivel
+/praxis_env/memory.py            @GunaPalanivel
+/idea/Plan/Architecture/         @GunaPalanivel
+/README.md                       @GunaPalanivel
+
+# TechLead lane
+/praxis_env/scenarios/           @Gokul287
+/server/reward.py                @Gokul287
+/inference.py                    @Gokul287
+/train_praxis_grpo.py            @Gokul287
+/Dockerfile                      @Gokul287
+/.github/workflows/              @Gokul287
+/idea/Plan/Demo/                 @Gokul287
+/idea/Plan/Submission/           @Gokul287
+
+# SDE lane (tests + smoke + cleanup) - both leads still review
+/tests/                          @GunaPalanivel @Gokul287
+/scripts/                        @GunaPalanivel @Gokul287
+/server/command_parser.py        @GunaPalanivel @Gokul287

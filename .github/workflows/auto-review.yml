@@ -1,0 +1,191 @@
+name: Auto Review
+
+# Implements ADR-11 from idea/Plan/Project/DecisionLog.md:
+#   - Architect (@GunaPalanivel) PRs  -> reviewed by @Gokul287
+#   - TechLead  (@Gokul287) PRs       -> reviewed by @GunaPalanivel
+#   - SDE       (@snehasneha56526-arch) PRs -> reviewed by BOTH leads + auto PR review
+#
+# Two jobs:
+#   1) assign-reviewers  - auto-requests review from the right humans on PR open.
+#   2) auto-pr-review    - posts a static-analysis review comment on every PR
+#                          (acts as the "auto PR review" reviewer slot Sneha never
+#                          fills). Runs ruff + pytest + openenv validate and
+#                          reports any failures back as a review comment so the
+#                          two human leads always have a starting checklist.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, synchronize]
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  checks: write
+
+env:
+  UV_VERSION: "0.9.17"
+
+concurrency:
+  group: auto-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  assign-reviewers:
+    name: Assign reviewers (per ADR-11)
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request reviewers based on author
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const author = context.payload.pull_request.user.login;
+            const ARCHITECT = "GunaPalanivel";
+            const TECH_LEAD = "Gokul287";
+            const SDE       = "snehasneha56526-arch";
+
+            const reviewers = new Set();
+            const labels    = new Set(["needs-review"]);
+
+            if (author === ARCHITECT) {
+              reviewers.add(TECH_LEAD);
+              labels.add("review:tech-lead");
+            } else if (author === TECH_LEAD) {
+              reviewers.add(ARCHITECT);
+              labels.add("review:architect");
+            } else if (author === SDE) {
+              reviewers.add(ARCHITECT);
+              reviewers.add(TECH_LEAD);
+              labels.add("review:both-leads");
+              labels.add("auto-pr-review:required");
+            } else {
+              // Outside contributor: ask both leads to pick it up.
+              reviewers.add(ARCHITECT);
+              reviewers.add(TECH_LEAD);
+              labels.add("review:external");
+            }
+
+            const reviewerList = [...reviewers].filter(r => r !== author);
+            if (reviewerList.length > 0) {
+              try {
+                await github.rest.pulls.requestReviewers({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.payload.pull_request.number,
+                  reviewers: reviewerList,
+                });
+                core.info(`Requested review from: ${reviewerList.join(", ")}`);
+              } catch (e) {
+                core.warning(`requestReviewers failed (likely already requested): ${e.message}`);
+              }
+            }
+
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                labels: [...labels],
+              });
+            } catch (e) {
+              core.warning(`addLabels failed: ${e.message}`);
+            }
+
+  auto-pr-review:
+    name: Auto PR review (static checks bot)
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    needs: assign-reviewers
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Sync dependencies
+        run: uv sync --all-extras
+
+      - name: Run ruff (capture)
+        id: ruff
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          uv pip install ruff
+          uv run ruff format --check praxis_env/ server/ tests/ inference.py 2>&1 | tee ruff_format.log
+          uv run ruff check praxis_env/ server/ tests/ inference.py 2>&1 | tee ruff_lint.log
+
+      - name: Run pytest (capture)
+        id: pytest
+        continue-on-error: true
+        run: |
+          uv run pytest tests/ -q --tb=short 2>&1 | tee pytest.log
+
+      - name: Run openenv validate (capture)
+        id: validate
+        continue-on-error: true
+        run: |
+          uv run openenv validate 2>&1 | tee validate.log
+
+      - name: Post review comment
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const safeRead = (p) => {
+              try { return fs.readFileSync(p, "utf8").slice(-4000); }
+              catch { return "(file missing)"; }
+            };
+            const ruffFormat = `${{ steps.ruff.outcome }}` === "success";
+            const pytest     = `${{ steps.pytest.outcome }}` === "success";
+            const validate   = `${{ steps.validate.outcome }}` === "success";
+
+            const status = (ok) => ok ? ":white_check_mark: pass" : ":x: fail";
+
+            const body = [
+              "### Auto PR review (static-checks bot)",
+              "",
+              "Implements ADR-11 / ADR-13 acceptance criteria for SDE PRs and",
+              "the `Review` bullet on every issue body.",
+              "",
+              `- ruff (format + lint): ${status(ruffFormat)}`,
+              `- pytest:               ${status(pytest)}`,
+              `- openenv validate:     ${status(validate)}`,
+              "",
+              ruffFormat ? "" : "<details><summary>ruff lint tail</summary>\n\n```\n" + safeRead("ruff_lint.log") + "\n```\n</details>",
+              pytest    ? "" : "<details><summary>pytest tail</summary>\n\n```\n"   + safeRead("pytest.log")   + "\n```\n</details>",
+              validate  ? "" : "<details><summary>openenv validate tail</summary>\n\n```\n" + safeRead("validate.log") + "\n```\n</details>",
+              "",
+              "_Posted by `auto-review.yml`. The two human leads still own approval per ADR-11._",
+            ].filter(Boolean).join("\n");
+
+            const event = (ruffFormat && pytest && validate) ? "APPROVE" : "REQUEST_CHANGES";
+            try {
+              await github.rest.pulls.createReview({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                body: body,
+                event: event,
+              });
+            } catch (e) {
+              // GitHub forbids the bot from REQUEST_CHANGES on PR authors of repo admins;
+              // fall back to a plain comment so the signal is still visible.
+              core.warning(`createReview ${event} failed (${e.message}); falling back to comment`);
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body: body,
+              });
+            }
