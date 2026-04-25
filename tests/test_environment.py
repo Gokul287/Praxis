@@ -27,6 +27,7 @@ class TestPraxisEnvironmentInit:
         assert "single-service-alert" in tasks
         assert "cascading-failure" in tasks
         assert "ambiguous-incident" in tasks
+        assert "cascading-platform-failure" in tasks
 
     def test_step_before_reset_raises_runtime_error(self):
         env = PraxisEnvironment()
