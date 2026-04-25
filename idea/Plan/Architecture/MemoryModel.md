@@ -105,8 +105,11 @@ Memory events emit reward tags that every task policy maps to a number:
 | `memory.recall_memory.before_cutoff` | +0.01         | Tiny — discourages habitual recall.         |
 | `memory.recall_memory.after_cutoff`  | +0.08         | Strong: planning paid off.                  |
 | `memory.illegal_log_after_cutoff`    | −0.05         | Querying logs after cutoff (logs are gone). |
+| `memory.empty_recall_after_cutoff`   | −0.02         | Recall after cutoff with no saved findings. |
 
-These are added to **every task's** `event_values` so the memory tools work for all 6 scenarios. See [`RewardPolicy.md`](./RewardPolicy.md) for full per-task tables.
+These are added to **every task's** `event_values` so the memory tools work for all scenarios. See [`RewardPolicy.md`](./RewardPolicy.md) for full per-task tables.
+
+Cross-link: ADR-13 additionally enforces an evidence gate where `remediation.*` scores are zeroed until root-cause diagnosis is confirmed, preventing memory-assisted reward hacking before diagnosis.
 
 ---
 
