@@ -190,8 +190,10 @@ jobs:
                   body: body,
                 });
               } catch (commentError) {
-                // Fork PRs can deny write scopes to GITHUB_TOKEN on pull_request events.
-                // Keep this workflow green when static checks already ran successfully.
-                core.warning(`createComment fallback failed (${commentError.message}); skipping comment`);
+                // On fork-triggered pull_request runs, token permissions can block
+                // both review and issue-comment APIs. Keep CI green and surface context.
+                core.warning(
+                  `createComment failed (${commentError.message}); skipping bot comment due to token permissions`
+                );
               }
             }
