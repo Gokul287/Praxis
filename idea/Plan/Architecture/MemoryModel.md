@@ -12,6 +12,8 @@
 
 ## 1. Class contract
 
+Status: shipped in `praxis_env/memory.py` (Issue #3).
+
 ```python
 # praxis_env/memory.py
 from dataclasses import dataclass, field
@@ -70,6 +72,8 @@ sequenceDiagram
 ---
 
 ## 3. Cutoff behaviour (the differentiator)
+
+Status: shipped in `praxis_env/memory.py::PraxisMemory.get_observation_context` (Issue #3).
 
 ```python
 def get_observation_context(self, full_log: list[str], step: int) -> str:
