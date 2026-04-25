@@ -195,12 +195,23 @@ _PLANNING_EVENTS: Mapping[str, float] = {
     "clarification.exhausted": 0.0,
 }
 
+# Recovery-surface events emitted by MissionScenario hidden-dependency and
+# disturbance-injection hooks (Issue #37). Values match RewardPolicy.md §3.6.
+_RECOVERY_EVENTS: Mapping[str, float] = {
+    "recovery.detected_disturbance_within_3_steps": 0.10,
+    "recovery.rollback_before_restart": 0.06,
+    "recovery.replan_after_disturbance": 0.05,
+    "recovery.hidden_dep_violated": 0.0,
+    "recovery.disturbance_ignored": 0.0,
+}
+
 
 def _with_memory_events(events: Mapping[str, float]) -> dict[str, float]:
     """Return a new event-value mapping with cross-task event rows."""
     merged = dict(events)
     merged.update(_MEMORY_EVENTS)
     merged.update(_PLANNING_EVENTS)
+    merged.update(_RECOVERY_EVENTS)
     return merged
 
 
@@ -400,7 +411,9 @@ DEFAULT_REWARD_POLICIES: dict[str, RewardPolicy] = {
                 "invalid_input": 0.0,
             }
         ),
-        time_pressure_cost_per_step=0.004,
+        # MissionOps step cost (Issue #37, RewardPolicy.md §3.6). Lowered
+        # from 0.004 -> 0.002 to keep the 150-step horizon survivable.
+        time_pressure_cost_per_step=0.002,
     ),
 }
 
@@ -547,6 +560,15 @@ class RewardEngine:
             # remediation — fold it in there so terminal-rubric callers can
             # still see the credit on the per-step breakdown.
             remediation_reward = effective_value
+        elif event.startswith("recovery."):
+            # Mission recovery surface (Issue #37). Positive bonuses fall
+            # into investigation_reward; negative tags (penalty for
+            # bypassing a hidden dependency) into destructive_penalty so
+            # they survive the per-step floor.
+            if effective_value >= 0:
+                investigation_reward = effective_value
+            else:
+                destructive_penalty = effective_value
 
         redundancy_penalty = policy.redundancy_penalty if duplicate else 0.0
         premature_penalty = policy.premature_penalty if premature else 0.0

@@ -11,7 +11,8 @@ from praxis_env.scenarios.single_service_alert import SingleServiceAlertScenario
 from praxis_env.scenarios.cascading_failure import CascadingFailureScenario
 from praxis_env.scenarios.ambiguous_incident import AmbiguousIncidentScenario
 from praxis_env.scenarios.memory_leak_scenario import MemoryLeakScenario
-from praxis_env.scenarios.mega_incident import MegaIncidentScenario
+from praxis_env.scenarios.mission_scenario import MissionScenario
+from praxis_env.scenarios.mega_incident import MegaIncidentScenario  # noqa: F401
 from praxis_env.scenarios.procedural_incident import ProceduralIncidentScenario
 
 # Populated as phases complete. Add new scenarios here.
@@ -20,7 +21,7 @@ SCENARIO_REGISTRY: dict[str, type[BaseScenario]] = {
     "cascading-failure": CascadingFailureScenario,
     "ambiguous-incident": AmbiguousIncidentScenario,
     "memory-leak": MemoryLeakScenario,
-    "cascading-platform-failure": MegaIncidentScenario,
+    "cascading-platform-failure": MissionScenario,
     "procedural-incident": ProceduralIncidentScenario,
 }
 
@@ -36,6 +37,8 @@ def get_scenario(
 
     Args:
         task_name: One of the registered scenario names
+        seed: Deterministic seed for procedural / mission scenarios
+        difficulty: Procedural-incident difficulty knob
 
     Returns:
         A fresh, initialised BaseScenario instance
@@ -50,6 +53,8 @@ def get_scenario(
         return SCENARIO_REGISTRY[task_name](
             seed=seed, difficulty=difficulty or "medium"
         )
+    if task_name == "cascading-platform-failure":
+        return SCENARIO_REGISTRY[task_name](seed=seed)
     return SCENARIO_REGISTRY[task_name]()
 
 
