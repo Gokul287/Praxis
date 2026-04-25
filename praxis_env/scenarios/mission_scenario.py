@@ -80,9 +80,8 @@ class MissionScenario(MegaIncidentScenarioLegacy):
         self._seed = int(seed) if seed is not None else 0
         # Disturbance step is deterministic per (seed). We hash the seed so
         # adjacent seeds don't all land on step 96.
-        self._disturbance_step = (
-            DISTURBANCE_BASE_STEP
-            + (self._seed % DISTURBANCE_SEED_RANGE)
+        self._disturbance_step = DISTURBANCE_BASE_STEP + (
+            self._seed % DISTURBANCE_SEED_RANGE
         )
         self._mission_id = f"mission-{self._seed:08x}"
         # ArtifactStore is optional - missing fixtures degrade to the
@@ -148,10 +147,7 @@ class MissionScenario(MegaIncidentScenarioLegacy):
             return "intake"
         if self._plan_created_step is None:
             return "exploration"
-        if (
-            self._first_checkpoint_step is None
-            and not self._diagnosed_root_causes
-        ):
+        if self._first_checkpoint_step is None and not self._diagnosed_root_causes:
             return "planning"
         return "execution"
 
@@ -176,9 +172,7 @@ class MissionScenario(MegaIncidentScenarioLegacy):
 
     # ── ArtifactStore-backed observation hooks ────────────────────────────
 
-    def _artifact_excerpt(
-        self, kind: str, service: str, *, banner: str
-    ) -> str:
+    def _artifact_excerpt(self, kind: str, service: str, *, banner: str) -> str:
         """Return a banner+body excerpt from the ArtifactStore, or "".
 
         ``banner`` is rendered above the excerpt so the agent can tell at
@@ -192,10 +186,7 @@ class MissionScenario(MegaIncidentScenarioLegacy):
         if not artifacts:
             return ""
         a = artifacts[0]
-        return (
-            f"\n\n{banner}\nSource: {a.source}\n"
-            f"---\n{a.body}\n---"
-        )
+        return f"\n\n{banner}\nSource: {a.source}\n---\n{a.body}\n---"
 
     def get_initial_observation_text(self) -> str:
         # Intake observation includes one on-call note from the most
@@ -270,10 +261,7 @@ class MissionScenario(MegaIncidentScenarioLegacy):
         milestone after the disturbance invalidated it).
         """
         invalid: set[str] = set()
-        if (
-            self._disturbance_injected
-            and not self._disturbance_recovered
-        ):
+        if self._disturbance_injected and not self._disturbance_recovered:
             # Coarse heuristic: anything mentioning "queue" or "backlog"
             # is invalid until the agent revises the plan.
             invalid.update({"queue", "backlog", "expand_worker_pool"})
@@ -320,14 +308,10 @@ class MissionScenario(MegaIncidentScenarioLegacy):
         pre_step = self._step_count + 1
 
         # Track the planning-machine flags used by `current_phase`.
-        if (
-            command.action_type == "create_plan"
-            and self._plan_created_step is None
-        ):
+        if command.action_type == "create_plan" and self._plan_created_step is None:
             self._plan_created_step = pre_step
         elif (
-            command.action_type == "checkpoint"
-            and self._first_checkpoint_step is None
+            command.action_type == "checkpoint" and self._first_checkpoint_step is None
         ):
             self._first_checkpoint_step = pre_step
 
@@ -350,8 +334,7 @@ class MissionScenario(MegaIncidentScenarioLegacy):
 
         # Disturbance trigger (deterministic per seed).
         will_inject_disturbance = (
-            not self._disturbance_injected
-            and pre_step >= self._disturbance_step
+            not self._disturbance_injected and pre_step >= self._disturbance_step
         )
 
         outcome = super().step(command)
@@ -427,8 +410,7 @@ class MissionScenario(MegaIncidentScenarioLegacy):
             command.action_type == "revise_plan"
             and self._disturbance_step_emitted is not None
             and not self._disturbance_recovered
-            and (pre_step - self._disturbance_step_emitted)
-            <= RECOVERY_WINDOW_STEPS
+            and (pre_step - self._disturbance_step_emitted) <= RECOVERY_WINDOW_STEPS
         ):
             self._disturbance_recovered = True
             return "recovery.replan_after_disturbance"
@@ -448,18 +430,14 @@ class MissionScenario(MegaIncidentScenarioLegacy):
         if (
             self._disturbance_step_emitted is not None
             and not self._disturbance_recovered
-            and (pre_step - self._disturbance_step_emitted)
-            <= RECOVERY_WINDOW_STEPS
-            and command.action_type
-            in {"rollback_deploy", "scale_resource"}
+            and (pre_step - self._disturbance_step_emitted) <= RECOVERY_WINDOW_STEPS
+            and command.action_type in {"rollback_deploy", "scale_resource"}
         ):
             return "recovery.detected_disturbance_within_3_steps"
 
         return None
 
-    def _apply_recovery_bonus(
-        self, outcome: StepOutcome, event: str
-    ) -> StepOutcome:
+    def _apply_recovery_bonus(self, outcome: StepOutcome, event: str) -> StepOutcome:
         bonus = self._score_event(event)
         # ``bonus.breakdown.total_unclamped`` already deducts a per-step
         # time-pressure cost; the underlying action's ``outcome.reward``

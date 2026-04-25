@@ -78,6 +78,7 @@ def _data_sources_metadata() -> list[dict[str, Any]]:
         )
     return sources
 
+
 DEFAULT_RATE_LIMIT = os.getenv("PRAXIS_RATE_LIMIT_DEFAULT", "120/minute")
 STEP_RATE_LIMIT = os.getenv("PRAXIS_RATE_LIMIT_STEP", "60/minute")
 RESET_RATE_LIMIT = os.getenv("PRAXIS_RATE_LIMIT_RESET", "30/minute")

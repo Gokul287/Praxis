@@ -162,10 +162,7 @@ class TestParseCommand:
             "create_plan milestones=isolate auth,run runbook,roll back deploy"
         )
         assert cmd.action_type == "create_plan"
-        assert (
-            cmd.params["milestones"]
-            == "isolate auth,run runbook,roll back deploy"
-        )
+        assert cmd.params["milestones"] == "isolate auth,run runbook,roll back deploy"
 
     def test_create_plan_missing_value(self):
         cmd = parse_command("create_plan milestones=")

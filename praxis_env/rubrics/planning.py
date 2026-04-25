@@ -26,8 +26,14 @@ _PLANNING_ACTIONS = frozenset(
     {"create_plan", "revise_plan", "checkpoint", "submit_report"}
 )
 _INVESTIGATION_ACTIONS = frozenset(
-    {"query_logs", "check_logs", "check_metrics", "check_deps", "check_config",
-     "check_runbook"}
+    {
+        "query_logs",
+        "check_logs",
+        "check_metrics",
+        "check_deps",
+        "check_config",
+        "check_runbook",
+    }
 )
 _DIAGNOSIS_ACTIONS = frozenset({"diagnose"})
 _REMEDIATION_ACTIONS = frozenset(
@@ -49,7 +55,11 @@ class PlanningRubric(Rubric):
             return 0.0, {"reason": "empty_trajectory"}
 
         first_investigation = next(
-            (i for i, e in enumerate(events) if e.action_type in _INVESTIGATION_ACTIONS),
+            (
+                i
+                for i, e in enumerate(events)
+                if e.action_type in _INVESTIGATION_ACTIONS
+            ),
             None,
         )
         first_diagnosis = next(
@@ -64,7 +74,10 @@ class PlanningRubric(Rubric):
         signals: list[float] = []
 
         if first_diagnosis is not None:
-            if first_investigation is not None and first_investigation < first_diagnosis:
+            if (
+                first_investigation is not None
+                and first_investigation < first_diagnosis
+            ):
                 signals.append(1.0)
             else:
                 signals.append(-1.0)
@@ -75,9 +88,7 @@ class PlanningRubric(Rubric):
             else:
                 signals.append(-1.0)
 
-        planning_count = sum(
-            1 for e in events if e.action_type in _PLANNING_ACTIONS
-        )
+        planning_count = sum(1 for e in events if e.action_type in _PLANNING_ACTIONS)
         # Each explicit planning action adds a +0.25 bump, capped at +0.5
         # so planning alone cannot dominate the structural ordering signal.
         planning_bonus = min(0.5, 0.25 * planning_count) if planning_count else 0.0
