@@ -1,0 +1,12 @@
+{"ts":"02:01:10Z","svc":"cdn","level":"WARN","msg":"cert expiry monitor: edge cert expires in 0 minutes","cert_id":"edge-prod-2025"}
+{"ts":"02:01:15Z","svc":"cdn","level":"ERROR","msg":"TLS handshake failure: certificate expired","sni":"api.example.com","pop":"eu-west-3"}
+{"ts":"02:01:22Z","svc":"cdn","level":"ERROR","msg":"renewal automation retries exhausted","retry_count":5,"last_err":"acme_unauthorized"}
+{"ts":"02:01:29Z","svc":"cdn","level":"WARN","msg":"fallback certificate chain not promoted; serving stale chain","fallback":"edge-fallback-2024"}
+{"ts":"02:01:36Z","svc":"cdn","level":"ERROR","msg":"edge POP eu-west-3 handshake failure ratio 41%"}
+{"ts":"02:01:43Z","svc":"cdn","level":"ERROR","msg":"origin fetch aborted: invalid certificate chain at edge","origin":"api.example.com"}
+{"ts":"02:01:50Z","svc":"cdn","level":"ERROR","msg":"edge POP us-east-1 handshake failure ratio 38%"}
+{"ts":"02:01:57Z","svc":"cdn","level":"WARN","msg":"client retry storm detected; 5xx propagating to upstream"}
+{"ts":"02:02:04Z","svc":"cdn","level":"ERROR","msg":"cert_not_after=2026-04-25T02:01:00Z; current=02:01:11Z (delta=+11s past expiry)"}
+{"ts":"02:02:11Z","svc":"cdn","level":"INFO","msg":"rollback_deploy candidate identified: revision=cdn-2026-04-24-rev3"}
+{"ts":"02:02:18Z","svc":"cdn","level":"ERROR","msg":"correlated TLS failures with api 5xx (corr=0.92)"}
+{"ts":"02:02:25Z","svc":"cdn","level":"ERROR","msg":"rollback required: cert rotation job stuck in 'queued' state for 11m"}

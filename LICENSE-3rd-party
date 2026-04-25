@@ -1,0 +1,42 @@
+LICENSE-3rd-party
+=================
+
+This file enumerates third-party data, code, and assets vendored into
+this repository, the upstream license each ships under, and the local
+path where the vendored content lives.
+
+If a downstream consumer needs the canonical license text for any
+listed item, follow the URL in the "Source" column.
+
+Vendored data
+-------------
+
+(none currently)
+
+Vendored code
+-------------
+
+(none currently)
+
+Notes on `data/artifacts/`
+--------------------------
+
+Issue #38 / ADR-17 originally planned to vendor a small subset of
+`Rootly-AI-Labs/logs-dataset` from Hugging Face under Apache-2.0.
+At vendoring time (2026-04-25) that dataset was not publicly available
+on Hugging Face (HTTP 404 on both the canonical and lower-cased repo
+slugs). Loghub (`logpai/loghub`), the next canonical real-world log
+corpus, ships under a research-only license that disallows
+redistribution in this repository.
+
+The `data/artifacts/` directory therefore contains
+**internally-authored Praxis fixtures only**. See
+`data/artifacts/NOTICE.md` for the full disclosure. No third-party data
+is currently redistributed under this repository's MIT license.
+
+When a properly-licensed real-world incident corpus becomes available,
+this file will be updated to enumerate the source, license, vendoring
+date, and local path; the corresponding fixtures under
+`data/artifacts/` will be replaced or augmented; and the
+`praxis_env.artifacts.ArtifactStore.PROVENANCE_PREFIX` will be updated
+to reflect the upstream provenance.

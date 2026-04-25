@@ -1,0 +1,12 @@
+{"ts":"02:01:40Z","svc":"database","level":"WARN","msg":"pool consistency check failed: checksum mismatch","slot_id":17}
+{"ts":"02:01:48Z","svc":"database","level":"WARN","msg":"allocator flagged corrupted connection slot block","block":"B0x00FE","slot_count":12}
+{"ts":"02:01:55Z","svc":"database","level":"ERROR","msg":"lock manager stalled while recycling pool entries","blocked_workers":84}
+{"ts":"02:02:02Z","svc":"database","level":"ERROR","msg":"client checkout failures rising: 0 -> 412/min","window_s":60}
+{"ts":"02:02:09Z","svc":"database","level":"ERROR","msg":"pool integrity guard disabled by ops hotfix at 01:55Z; corruption now visible"}
+{"ts":"02:02:16Z","svc":"database","level":"WARN","msg":"slow query log: count=37 over 1s","top_q":"SELECT ... FROM sessions"}
+{"ts":"02:02:23Z","svc":"database","level":"ERROR","msg":"replica lag spiked to 12.4s","replica":"db-replica-2"}
+{"ts":"02:02:30Z","svc":"database","level":"WARN","msg":"checksum re-validation rejected 9/100 returned slots","ratio":0.09}
+{"ts":"02:02:37Z","svc":"database","level":"ERROR","msg":"pool returned 0 healthy connections to caller","caller":"api-checkout"}
+{"ts":"02:02:44Z","svc":"database","level":"ERROR","msg":"rejected new checkouts: pool_state=DEGRADED"}
+{"ts":"02:02:51Z","svc":"database","level":"INFO","msg":"automatic remediation skipped; integrity_guard=disabled prevents safe drain"}
+{"ts":"02:02:58Z","svc":"database","level":"ERROR","msg":"pool reports 79% checkout failure rate sustained for 60s"}

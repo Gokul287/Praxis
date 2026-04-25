@@ -1,0 +1,12 @@
+{"ts":"02:01:55Z","svc":"worker","level":"WARN","msg":"memory usage crossed 92%","heap_mb":1885,"limit_mb":2048}
+{"ts":"02:02:02Z","svc":"worker","level":"WARN","msg":"GC pause 3.4s; mutator stalled","gen":"old"}
+{"ts":"02:02:09Z","svc":"worker","level":"ERROR","msg":"process terminated: OOMKilled","sig":9,"pid":4321}
+{"ts":"02:02:10Z","svc":"worker","level":"INFO","msg":"pod restart initiated by kubelet","pod":"worker-7d-9z"}
+{"ts":"02:02:17Z","svc":"worker","level":"WARN","msg":"memory climbed to 95% immediately after restart","heap_mb":1945}
+{"ts":"02:02:24Z","svc":"worker","level":"WARN","msg":"BATCH_SIZE=5000 (raised from 200 in v5.9.0)","deploy":"v5.9.0"}
+{"ts":"02:02:31Z","svc":"worker","level":"ERROR","msg":"per-job heap delta 380KiB; net retained=+1.1MiB","cycle_jobs":2900}
+{"ts":"02:02:38Z","svc":"worker","level":"WARN","msg":"queue dispatcher backpressure asserted"}
+{"ts":"02:02:45Z","svc":"worker","level":"ERROR","msg":"second OOMKilled within 60s","sig":9,"pid":4322}
+{"ts":"02:02:52Z","svc":"worker","level":"ERROR","msg":"crash-loop pattern detected; restart count (1h)=23"}
+{"ts":"02:02:59Z","svc":"worker","level":"INFO","msg":"prior incident #4827 referenced same v5.9.0 pattern"}
+{"ts":"02:03:06Z","svc":"worker","level":"ERROR","msg":"linear heap growth observed; predicted OOM in 45s if BATCH_SIZE not reverted"}

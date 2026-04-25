@@ -19,7 +19,7 @@ tasks:
     max_steps: 25
   - name: cascading-platform-failure
     difficulty: hard
-    max_steps: 120
+    max_steps: 150
 action:
   type: text
   field: command
@@ -34,4 +34,18 @@ observation:
       severity,
       services_affected,
       step_number,
+      mission_id,
+      phase,
+      time_budget,
+      pending_objectives,
     ]
+data_sources:
+  # MissionScenario surfaces these vendored fixtures via ArtifactStore
+  # (Issue #38, ADR-17). Provenance prefix and license are documented
+  # at the canonical paths below.
+  - name: praxis-mission-fixtures
+    kind: internal
+    root: data/artifacts
+    notice: data/artifacts/NOTICE.md
+    provenance_prefix: "praxis:fixtures"
+    license_file: LICENSE-3rd-party

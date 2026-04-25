@@ -35,6 +35,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
+from praxis_env.artifacts import load_default_store
 from praxis_env.models import PraxisAction, PraxisObservation, PraxisState
 from server.praxis_environment import PraxisEnvironment
 from server.session_manager import Session, SessionManager
@@ -51,6 +52,31 @@ logger = logging.getLogger(__name__)
 # ── Global session manager + rate limiter ─────────────────────────────────────
 manager = SessionManager()
 task_catalog = PraxisEnvironment().list_tasks()
+
+
+def _data_sources_metadata() -> list[dict[str, Any]]:
+    """Return a /metadata payload describing vendored data sources.
+
+    The list is empty when the ArtifactStore is unavailable so the
+    contract stays honest about what's actually shipping.
+    """
+    sources: list[dict[str, Any]] = []
+    store = load_default_store(seed=0)
+    if store is not None:
+        sources.append(
+            {
+                "name": "praxis-mission-fixtures",
+                "kind": "internal",
+                "root": str(store.root.as_posix()),
+                "provenance_prefix": store.PROVENANCE_PREFIX,
+                "attribution": store.attribution(),
+                "notice": "data/artifacts/NOTICE.md",
+                "license_file": "LICENSE-3rd-party",
+                "artifact_count": len(store),
+                "services": store.services(),
+            }
+        )
+    return sources
 
 DEFAULT_RATE_LIMIT = os.getenv("PRAXIS_RATE_LIMIT_DEFAULT", "120/minute")
 STEP_RATE_LIMIT = os.getenv("PRAXIS_RATE_LIMIT_STEP", "60/minute")
@@ -175,6 +201,7 @@ def create_app() -> FastAPI:
                 "schema": "/schema",
                 "mcp": "/mcp",
             },
+            "data_sources": _data_sources_metadata(),
         }
 
     @app.get("/schema")

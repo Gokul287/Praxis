@@ -1,0 +1,12 @@
+{"ts":"02:01:55Z","svc":"api","level":"WARN","msg":"upstream cdn returned 502 for /v1/checkout","trace_id":"a31f2","peer":"cdn-edge-17"}
+{"ts":"02:02:02Z","svc":"api","level":"ERROR","msg":"db pool checkout timeout after 5s","trace_id":"a31f3","upstream":"db-primary"}
+{"ts":"02:02:09Z","svc":"api","level":"ERROR","msg":"auth verify timeout after 5s","trace_id":"a31f4","upstream":"auth-service"}
+{"ts":"02:02:16Z","svc":"api","level":"ERROR","msg":"5xx ratio crossed 30% threshold (curr=31.2%)","window_s":60}
+{"ts":"02:02:23Z","svc":"api","level":"WARN","msg":"retry budget exhausted for upstream cdn","retries":3}
+{"ts":"02:02:30Z","svc":"api","level":"ERROR","msg":"TLS handshake error contacting cdn-edge-22","trace_id":"a31f5"}
+{"ts":"02:02:37Z","svc":"api","level":"ERROR","msg":"db pool reports state=corrupted","trace_id":"a31f6"}
+{"ts":"02:02:44Z","svc":"api","level":"ERROR","msg":"503 returned to client; cause=upstream_unavailable","trace_id":"a31f7"}
+{"ts":"02:02:51Z","svc":"api","level":"WARN","msg":"circuit breaker opened for cdn upstream","duration_s":30}
+{"ts":"02:02:58Z","svc":"api","level":"ERROR","msg":"correlated 5xx with cdn TLS errors and db checkout failures","window_s":120}
+{"ts":"02:03:05Z","svc":"api","level":"WARN","msg":"backpressure asserted on /v1/checkout (target rps 800, served 540)","ratio":0.67}
+{"ts":"02:03:12Z","svc":"api","level":"ERROR","msg":"persistent 5xx; opening incident #4827"}

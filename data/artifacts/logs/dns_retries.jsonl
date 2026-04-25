@@ -1,0 +1,6 @@
+{"ts":"02:02:05Z","svc":"dns","level":"WARN","msg":"resolver retries elevated due to upstream timeouts","retry_count":421}
+{"ts":"02:02:15Z","svc":"dns","level":"WARN","msg":"p95 lookup latency increased from 12ms to 64ms"}
+{"ts":"02:02:25Z","svc":"dns","level":"WARN","msg":"NXDOMAIN stable at baseline (not primary fault)"}
+{"ts":"02:02:35Z","svc":"dns","level":"INFO","msg":"resolver fanned out to secondary upstream after 3 retry timeouts"}
+{"ts":"02:02:45Z","svc":"dns","level":"WARN","msg":"cache hit ratio dropped from 0.98 to 0.81 due to TTL expiries"}
+{"ts":"02:02:55Z","svc":"dns","level":"INFO","msg":"diagnosis hint: dns latency is symptomatic of cdn TLS failures (origin retries fan out)"}
