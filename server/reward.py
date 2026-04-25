@@ -23,7 +23,11 @@ Calibration rationale (updated for difficulty-curve fix):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
+
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from praxis_env.models import PraxisState
 
 
 MIN_REWARD = 0.01
@@ -33,6 +37,35 @@ MAX_REWARD = 0.99
 def clamp_reward(value: float) -> float:
     """Clamp score to the judge-safe open interval [0.01, 0.99]."""
     return max(MIN_REWARD, min(MAX_REWARD, float(value)))
+
+
+def compute_task_score(state: "PraxisState", *, max_steps: int) -> float:
+    """
+    ADR-20 / Issue #34 - outcome x efficiency final episode score.
+
+    The agent only earns credit when both the incident is resolved AND the
+    root cause has been correctly diagnosed. Final score is the cumulative
+    in-episode reward attenuated by an efficiency factor that linearly
+    decays as the agent burns more of its step budget. Pure-noise rollouts
+    that wander to ``max_steps`` therefore score the clamped floor of 0.01,
+    while a 4-step targeted solve on a 20-step task earns the full
+    cumulative reward * 0.80.
+
+    Args:
+        state: The episode state snapshot from PraxisEnvironment.state().
+        max_steps: The scenario's MAX_STEPS budget (must be > 0).
+
+    Returns:
+        Clamped final score in the judge-safe interval [0.01, 0.99].
+    """
+    safe_max_steps = max(1, int(max_steps))
+    outcome_quality = (
+        float(state.cumulative_reward)
+        if (state.incident_resolved and state.root_cause_identified)
+        else 0.0
+    )
+    efficiency_factor = max(0.0, 1.0 - (state.step_count / safe_max_steps))
+    return clamp_reward(outcome_quality * efficiency_factor)
 
 
 @dataclass(frozen=True)

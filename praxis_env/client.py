@@ -152,6 +152,7 @@ class PraxisEnv:
             cumulative_reward=data.get("cumulative_reward", 0.01),
             session_id=data.get("session_id", ""),
             memory_active=data.get("memory_active", False),
+            final_score=data.get("final_score"),
         )
 
     async def close(self) -> None:
