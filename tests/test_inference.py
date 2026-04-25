@@ -128,6 +128,10 @@ def test_parse_task_list_falls_back_when_all_invalid():
     ]
 
 
+def test_mission_inference_budget_matches_scenario_contract():
+    assert inference.MAX_STEPS_BY_TASK["cascading-platform-failure"] == 150
+
+
 def test_fallback_command_sequences_start_correctly():
     assert (
         inference.fallback_command("single-service-alert", 1)
