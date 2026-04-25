@@ -393,7 +393,9 @@ TLS handshake failures with expired certs require cert refresh or rollback_deplo
         if not duplicate:
             self._done_investigations.add(key)
 
-        score = self._score_event("investigation.check_deps.default", duplicate=duplicate)
+        score = self._score_event(
+            "investigation.check_deps.default", duplicate=duplicate
+        )
         return StepOutcome(
             investigation_result=data,
             reward=score.reward,
@@ -572,9 +574,7 @@ TLS handshake failures with expired certs require cert refresh or rollback_deplo
                 "remediation actions."
             )
         else:
-            message = (
-                f"Action '{command.action_type}' did not remediate any active root cause."
-            )
+            message = f"Action '{command.action_type}' did not remediate any active root cause."
 
         return StepOutcome(
             investigation_result=message,
@@ -620,7 +620,10 @@ TLS handshake failures with expired certs require cert refresh or rollback_deplo
         )
 
     def _all_causes_and_remediations_complete(self) -> bool:
-        return len(self._diagnosed_root_causes) == 3 and len(self._applied_remediations) == 3
+        return (
+            len(self._diagnosed_root_causes) == 3
+            and len(self._applied_remediations) == 3
+        )
 
     def _apply_partial_recovery(self, cause: str) -> None:
         if cause == "db_pool_corrupted":

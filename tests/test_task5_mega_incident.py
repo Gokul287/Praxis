@@ -119,4 +119,3 @@ def test_remediation_before_diagnosis_scores_zero():
     )
     assert outcome.reward == pytest.approx(0.01, abs=1e-6)
     assert scenario._incident_resolved is False
-
