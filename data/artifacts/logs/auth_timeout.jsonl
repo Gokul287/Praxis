@@ -1,0 +1,8 @@
+{"ts":"02:02:01Z","svc":"auth","level":"WARN","msg":"token validation latency p95 climbed to 4.8s","baseline_ms":120}
+{"ts":"02:02:08Z","svc":"auth","level":"ERROR","msg":"token validation timeout waiting on database","upstream":"db-primary"}
+{"ts":"02:02:15Z","svc":"auth","level":"ERROR","msg":"callback to api failed: edge TLS failure","peer":"cdn-edge-17"}
+{"ts":"02:02:22Z","svc":"auth","level":"WARN","msg":"queue dispatch delayed > 11s"}
+{"ts":"02:02:29Z","svc":"auth","level":"ERROR","msg":"login timeout rate 26%","window_s":60}
+{"ts":"02:02:36Z","svc":"auth","level":"INFO","msg":"diagnosis hint: auth wait time tracks db pool checkout failure rate (corr=0.91)"}
+{"ts":"02:02:43Z","svc":"auth","level":"ERROR","msg":"degraded login path enabled; password-only fallback active"}
+{"ts":"02:02:50Z","svc":"auth","level":"WARN","msg":"OAuth refresh tokens reissued: 4280 in 5s window"}

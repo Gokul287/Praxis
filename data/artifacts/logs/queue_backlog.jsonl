@@ -1,0 +1,8 @@
+{"ts":"02:01:55Z","svc":"queue","level":"INFO","msg":"pending jobs: 120000","topic":"checkout-events"}
+{"ts":"02:02:05Z","svc":"queue","level":"WARN","msg":"pending jobs: 188000","growth_rate_per_min":3400}
+{"ts":"02:02:15Z","svc":"queue","level":"ERROR","msg":"pending jobs: 243000 (critical threshold breached)","threshold":200000}
+{"ts":"02:02:25Z","svc":"queue","level":"WARN","msg":"consumer lag p99 climbed to 8.2s"}
+{"ts":"02:02:35Z","svc":"queue","level":"ERROR","msg":"DLQ ingestion rate 1200/min (baseline 12/min)"}
+{"ts":"02:02:45Z","svc":"queue","level":"WARN","msg":"shard rebalance triggered; consumers=12 -> 14"}
+{"ts":"02:02:55Z","svc":"queue","level":"ERROR","msg":"consumer worker-pool reports 0 healthy workers (all OOMKilled)"}
+{"ts":"02:03:05Z","svc":"queue","level":"INFO","msg":"backlog secondary symptom; root cause is consumer process death"}

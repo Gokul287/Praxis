@@ -23,8 +23,9 @@ keep working.
 
 from __future__ import annotations
 
+from praxis_env.artifacts import ArtifactStore, load_default_store
 from praxis_env.models import StepOutcome
-from praxis_env.scenarios.base import ParsedCommand
+from praxis_env.scenarios.base import ParsedCommand, get_service_param
 from praxis_env.scenarios.mega_incident_legacy import MegaIncidentScenarioLegacy
 
 
@@ -69,7 +70,12 @@ class MissionScenario(MegaIncidentScenarioLegacy):
     MAX_STEPS = 150
     MEMORY_CUTOFF_OVERRIDE = 30
 
-    def __init__(self, seed: int | None = None) -> None:
+    def __init__(
+        self,
+        seed: int | None = None,
+        *,
+        artifact_store: ArtifactStore | None = None,
+    ) -> None:
         super().__init__()
         self._seed = int(seed) if seed is not None else 0
         # Disturbance step is deterministic per (seed). We hash the seed so
@@ -79,6 +85,14 @@ class MissionScenario(MegaIncidentScenarioLegacy):
             + (self._seed % DISTURBANCE_SEED_RANGE)
         )
         self._mission_id = f"mission-{self._seed:08x}"
+        # ArtifactStore is optional - missing fixtures degrade to the
+        # legacy in-memory tables so the env still runs in stripped-down
+        # deployments. When present, it's used to surface real production
+        # excerpts on query_logs / check_runbook / Intake.
+        if artifact_store is not None:
+            self._artifact_store: ArtifactStore | None = artifact_store
+        else:
+            self._artifact_store = load_default_store(seed=self._seed)
 
     # ── Reset ─────────────────────────────────────────────────────────────
 
@@ -145,13 +159,108 @@ class MissionScenario(MegaIncidentScenarioLegacy):
 
     @property
     def artifact_attribution(self) -> list[str]:
-        """Vendored-data attribution surfaced via /state.
+        """Vendored-data attribution surfaced via /state and /metadata.
 
-        Issue #38 will fill this in when the ArtifactStore lands; for now
-        the mission scenario reports an empty attribution so callers can
-        already treat the field as authoritative.
+        Each entry is a self-contained provenance line; consumers can
+        render them verbatim. When the ArtifactStore is unavailable
+        (e.g. in stripped-down deployments) the list is empty.
         """
-        return []
+        if self._artifact_store is None:
+            return []
+        return [self._artifact_store.attribution()]
+
+    @property
+    def artifact_store(self) -> ArtifactStore | None:
+        """Public accessor used by ``server.app`` `/metadata`."""
+        return self._artifact_store
+
+    # ── ArtifactStore-backed observation hooks ────────────────────────────
+
+    def _artifact_excerpt(
+        self, kind: str, service: str, *, banner: str
+    ) -> str:
+        """Return a banner+body excerpt from the ArtifactStore, or "".
+
+        ``banner`` is rendered above the excerpt so the agent can tell at
+        a glance which fixture was surfaced. We always emit the
+        ``Source: <provenance>`` line so the agent can cite the exact
+        excerpt in plans / submit_report bodies.
+        """
+        if self._artifact_store is None:
+            return ""
+        artifacts = self._artifact_store.draw(kind, service, n=1)
+        if not artifacts:
+            return ""
+        a = artifacts[0]
+        return (
+            f"\n\n{banner}\nSource: {a.source}\n"
+            f"---\n{a.body}\n---"
+        )
+
+    def get_initial_observation_text(self) -> str:
+        # Intake observation includes one on-call note from the most
+        # impactful service so the agent has prior context that mirrors
+        # what real on-call engineers see when paged.
+        base = super().get_initial_observation_text()
+        if self._artifact_store is None:
+            return base
+        # Service is picked deterministically per seed so replays match.
+        candidates = ["database", "cdn", "worker"]
+        idx = self._seed % len(candidates)
+        excerpt = self._artifact_excerpt(
+            "note",
+            candidates[idx],
+            banner="[INTAKE: most-recent on-call note for the impacted service]",
+        )
+        return base + excerpt
+
+    # ── Action overrides that surface real excerpts ───────────────────────
+
+    def _handle_query_logs(self, command: ParsedCommand) -> StepOutcome:
+        outcome = super()._handle_query_logs(command)
+        if self._artifact_store is None:
+            return outcome
+        service = get_service_param(command.params, default="api")
+        excerpt = self._artifact_excerpt(
+            "log",
+            service,
+            banner=f"[VENDORED LOG EXCERPT: {service}]",
+        )
+        if not excerpt:
+            return outcome
+        return StepOutcome(
+            investigation_result=outcome.investigation_result + excerpt,
+            reward=outcome.reward,
+            done=outcome.done,
+            incident_resolved=outcome.incident_resolved,
+            root_cause_identified=outcome.root_cause_identified,
+            info=outcome.info,
+        )
+
+    def _handle_check_runbook(self, command: ParsedCommand) -> StepOutcome:
+        outcome = super()._handle_check_runbook(command)
+        if self._artifact_store is None:
+            return outcome
+        service = get_service_param(command.params, default="database")
+        kind = (command.params.get("kind") or "runbook").lower().strip()
+        if kind not in {"runbook", "ticket"}:
+            kind = "runbook"
+        banner = (
+            f"[VENDORED RUNBOOK EXCERPT: {service}]"
+            if kind == "runbook"
+            else f"[PRIOR TICKET EXCERPT: {service}]"
+        )
+        excerpt = self._artifact_excerpt(kind, service, banner=banner)
+        if not excerpt:
+            return outcome
+        return StepOutcome(
+            investigation_result=outcome.investigation_result + excerpt,
+            reward=outcome.reward,
+            done=outcome.done,
+            incident_resolved=outcome.incident_resolved,
+            root_cause_identified=outcome.root_cause_identified,
+            info=outcome.info,
+        )
 
     def mission_world_state(self) -> dict[str, object]:
         """Snapshot of mission state used by MissionPlan.checkpoint().

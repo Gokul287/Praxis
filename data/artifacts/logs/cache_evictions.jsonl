@@ -1,0 +1,6 @@
+{"ts":"02:02:05Z","svc":"cache","level":"WARN","msg":"cache misses climbing due to API retries","miss_rate":0.31}
+{"ts":"02:02:15Z","svc":"cache","level":"WARN","msg":"stale object invalidation lag increased to 48s","baseline_s":2}
+{"ts":"02:02:25Z","svc":"cache","level":"WARN","msg":"evictions elevated from queue replay traffic","evict_per_s":840}
+{"ts":"02:02:35Z","svc":"cache","level":"INFO","msg":"hit ratio 0.71 (baseline 0.94) - retry storm secondary effect"}
+{"ts":"02:02:45Z","svc":"cache","level":"WARN","msg":"cluster compaction triggered to recover memory"}
+{"ts":"02:02:55Z","svc":"cache","level":"INFO","msg":"diagnosis hint: cache pressure is downstream of api retries; not a primary cause"}

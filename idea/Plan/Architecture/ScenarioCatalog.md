@@ -258,14 +258,29 @@ Determinism tests run each scenario 3× per (seed, difficulty) and assert byte-i
 
 ---
 
-## 7. Rootly artifact provenance + license (Issue #27, ADR-17)
+## 7. Rootly artifact provenance + license (Issue #27, ADR-17) — _shipped (Issue #38)_
 
-### 7.1 Source
+> **Implementation status**: shipped in [`praxis_env/artifacts.py`](../../../praxis_env/artifacts.py),
+> [`data/artifacts/`](../../../data/artifacts), and [`LICENSE-3rd-party`](../../../LICENSE-3rd-party).
+> Vendoring deviated from the original Rootly source — see 7.1 below.
 
-- **Dataset**: Rootly AI Labs `logs-dataset` — https://huggingface.co/datasets/Rootly-AI-Labs/logs-dataset
-- **License**: Apache-2.0 (permits redistribution + derivatives; we vendor a small sample with attribution).
-- **Vendored sample size**: ≤ 200 KB of de-duplicated log/ticket/runbook excerpts under `data/artifacts/`; full dataset is NOT shipped.
-- **Why vendored, not downloaded at runtime**: HF Space cold-start latency, offline-judging risk, ToS clarity. ADR-17.
+### 7.1 Source — _shipped (deviation noted)_
+
+- **Originally planned**: Rootly AI Labs `logs-dataset` (Apache-2.0).
+- **Status at vendoring time (2026-04-25)**: the dataset was not publicly
+  available on Hugging Face (`Rootly-AI-Labs/logs-dataset` returned 404
+  with and without auth). Loghub (the canonical real-world log corpus)
+  ships under a research-only license incompatible with this repo.
+- **What was shipped instead**: internally-authored Praxis fixtures
+  modelled on real production formats (Apache common log / JSON
+  structured logs / SRE runbook prose / Jira-style tickets / on-call
+  note prose) under `data/artifacts/`. See
+  [`data/artifacts/NOTICE.md`](../../../data/artifacts/NOTICE.md) for the
+  full disclosure and follow-up plan.
+- **Vendored sample size**: ≤ 200 KB (verified by
+  `tests/test_artifacts.py::test_total_size_under_200kb`).
+- **Provenance prefix**: `praxis:fixtures` (not `rootly:logs-dataset`)
+  until a properly-licensed real-world source is identified.
 
 ### 7.2 Layout
 
@@ -329,10 +344,15 @@ Determinism: `(seed, kind, service, n)` always returns the same artifacts in the
 | `check_runbook service=<x> kind=ticket` | `ticket` (1 excerpt) | MissionOps Exploration phase |
 | Initial `/reset` observation | `note` (on-call note) inlined into `alert_summary` | MissionOps Intake phase |
 
-### 7.5 Compliance checklist (PR #27)
+### 7.5 Compliance checklist (PR #38) — _shipped_
 
-- [ ] `data/artifacts/NOTICE.md` includes Rootly attribution + Apache-2.0 license + commit hash + dataset URL.
-- [ ] `data/artifacts/README.md` documents the vendored subset and exclusion rules (no PII, no secrets — verified by GitGuardian on the data dir).
-- [ ] `LICENSE-3rd-party` updated.
-- [ ] `praxis_env/artifacts.py::ArtifactStore.attribution()` returns the same string surfaced from `/metadata` so judges can read it without opening the repo.
-- [ ] `openenv.yaml` adds `data_sources: [{name: rootly-logs-dataset, license: Apache-2.0, url: ...}]`.
+- [x] `data/artifacts/NOTICE.md` documents provenance + the
+      Rootly-source-unavailable disclosure + follow-up plan.
+- [x] `data/artifacts/README.md` documents the vendored subset, layout
+      conventions, and exclusion rules (no PII, no secrets).
+- [x] `LICENSE-3rd-party` shipped at the repo root, mirroring the
+      NOTICE.
+- [x] `praxis_env/artifacts.py::ArtifactStore.attribution()` returns
+      the same string surfaced from `/metadata`.
+- [x] `openenv.yaml` adds a `data_sources` block describing the
+      vendored fixtures.

@@ -304,7 +304,13 @@ class TestMissionMetadata:
         state = env.state()
         assert state.mission_id is not None
         assert state.phase == "intake"
-        assert state.artifact_attribution == []
+        # When the ArtifactStore has loaded its vendored fixtures (Issue
+        # #38) the attribution is populated; otherwise it's empty. Both
+        # shapes are valid - we only care that the field is a list of
+        # strings.
+        assert isinstance(state.artifact_attribution, list)
+        for line in state.artifact_attribution:
+            assert isinstance(line, str)
 
     def test_observation_exposes_time_budget(self):
         env = PraxisEnvironment()
