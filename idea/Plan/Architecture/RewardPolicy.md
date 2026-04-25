@@ -215,3 +215,108 @@ def _with_memory_events(events: Mapping[str, float]) -> Mapping[str, float]:
 - [ ] `clamp_reward` is applied exactly once at the boundary.
 - [ ] `remediation.*` events are zeroed when `root_cause_identified=False` (ADR-13 evidence gate).
 - [ ] `pytest -q tests/test_reward.py` and `tests/test_memory.py` pass.
+
+---
+
+## 8. Composable Rubrics (Issue #24, ADR-18) — judge checklist item #13
+
+> Verbatim hackathon-criterion line: _"Uses OpenEnv's Rubric system thoughtfully (composable rubrics > monolithic scoring)"_. We split `server/reward.py` into 4 first-class `Rubric` objects that each implement `score(trajectory) -> RubricResult` and register with `RewardEngine`.
+
+```python
+# server/rubrics/__init__.py
+from .planning import PlanningRubric        # 0.20
+from .memory   import MemoryRubric          # 0.20
+from .recovery import RecoveryRubric        # 0.20
+from .terminal import TerminalRubric        # 0.40
+
+DEFAULT_RUBRIC_BUNDLE = (
+    PlanningRubric(weight=0.20),
+    MemoryRubric(weight=0.20),
+    RecoveryRubric(weight=0.20),
+    TerminalRubric(weight=0.40),
+)
+```
+
+### 8.1 What each rubric scores
+
+| Rubric | Weight | Inputs (from `Trajectory`) | Positive signals | Negative signals |
+| --- | --- | --- | --- | --- |
+| `PlanningRubric` | 0.20 | `create_plan`, `revise_plan`, `checkpoint`, milestone ordering | Plan covers ≥3 root causes pre-cutoff; plan revisions track new evidence; subgoals completed in declared order. | Plan drift; uncovered root causes; checkpoint without underlying evidence. |
+| `MemoryRubric` | 0.20 | `save_finding`, `recall_memory`, cutoff state | The 6 memory event tags from §1. | `memory.illegal_log_after_cutoff`, `memory.empty_recall_after_cutoff`. |
+| `RecoveryRubric` | 0.20 | Disturbance phase (mega §3.4 step 30/60/90), `rollback_deploy`, `revise_plan` after error | Detects mistakes within ≤3 steps; rolls back irreversible bad action; re-plans without losing prior subgoals. | Repeated useless actions; ignoring disturbance signals; destructive ops without rollback path. |
+| `TerminalRubric` | 0.40 | `_incident_resolved`, `_root_cause_identified`, `submit_report` consistency | All required subgoals completed AND root causes diagnosed AND remediations succeeded AND submitted report consistent with world state. | Any one of those False ⇒ terminal score = 0. |
+
+### 8.2 Composition rule
+
+```python
+@dataclass
+class RewardEngine:
+    rubrics: Sequence[Rubric] = DEFAULT_RUBRIC_BUNDLE
+
+    def score(self, traj: Trajectory) -> RewardBreakdown:
+        components = {r.name: r.score(traj) for r in self.rubrics}
+        weighted = sum(c.value * r.weight for r, c in zip(self.rubrics, components.values()))
+        return RewardBreakdown(
+            planning=components["PlanningRubric"],
+            memory=components["MemoryRubric"],
+            recovery=components["RecoveryRubric"],
+            terminal=components["TerminalRubric"],
+            total=clamp_reward(weighted),
+        )
+```
+
+Invariants enforced by `tests/test_rubrics.py` (Issue #34):
+
+- Sum of rubric weights == 1.0 (asserted at engine init).
+- Each rubric's `score()` returns a value in `[-1.0, 1.0]` before weighting.
+- `RewardBreakdown.total` always in `[0.01, 0.99]` after `clamp_reward`.
+- Disabling any one rubric (weight=0) drops aggregate score by exactly `weight × that_rubric_value` — proves orthogonality.
+
+### 8.3 Backwards-compat with per-task `event_values`
+
+Existing per-task `event_values` (from §2/§3) become **inputs** to the rubrics, not the source of truth. `MemoryRubric` reads memory event tags; `PlanningRubric` reads planning-action tags; `TerminalRubric` reads `diagnosis.*` + `remediation.*` + `_incident_resolved`. The README and `RewardBreakdown` JSON in `/step` responses both expose the 4-rubric split so judges and the GRPO loss visualisation can show credit attribution.
+
+---
+
+## 9. Score formula (Issue #23, ADR-20) — outcome × efficiency
+
+> Replaces the old `compute_task_score = sum(rewards) / len(rewards)`. Avg reward treated wandering identically to targeted runs; this formula makes 4-step targeted runs strictly beat 20-step wandering runs.
+
+```python
+def compute_task_score(
+    rewards: list[float],
+    *,
+    state: PraxisState,
+    max_steps: int,
+) -> float:
+    """ADR-20 / Issue #23 — outcome × efficiency."""
+    outcome_quality = (
+        state.cumulative_reward
+        if state.incident_resolved and state.root_cause_identified
+        else 0.0
+    )
+    efficiency_factor = max(0.0, 1.0 - state.step_count / max_steps)
+    return clamp_reward(outcome_quality * efficiency_factor)
+```
+
+### 9.1 Properties
+
+- **Outcome gate**: `outcome_quality = 0` when either `_incident_resolved=False` or `_root_cause_identified=False` ⇒ final score = `clamp_reward(0)` = `0.01`. Cannot be gamed by reward farming.
+- **Efficiency factor**: linear `(1 - steps/max_steps)`, label-friendly. Targeted 4-step solve on a 20-step task ⇒ factor = 0.80. 20-step wander ⇒ factor = 0.0.
+- **Composes with rubrics**: `state.cumulative_reward` is itself the weighted sum from §8.2, so the score formula stacks on top of composable rubrics (not instead of them).
+
+### 9.2 Migration
+
+- `inference.py` → use the new helper; emit `[END] success=<bool> steps=<n> rewards=<r1,...,rn> score=<final>`.
+- `docs/baseline_scores.md` rebuilds during Issue #30 with the new formula.
+- README's score-gap table refreshes with 3 rows under the new formula + a 4th row appended after Issue #32 training.
+
+---
+
+## 10. Updated audit checklist (extends §7)
+
+- [ ] `RewardEngine` ships with the 4-rubric bundle; weights sum to 1.0.
+- [ ] `tests/test_rubrics.py` (Issue #34) covers each rubric independently and asserts orthogonality.
+- [ ] `compute_task_score` uses the §9 formula; `tests/test_reward.py::test_score_formula_outcome_times_efficiency` green.
+- [ ] Fallback-policy rollout (random commands, no diagnosis) scores ≤ 0.10 under the new formula.
+- [ ] `inference.py` `[END]` line includes the new `score=` field.

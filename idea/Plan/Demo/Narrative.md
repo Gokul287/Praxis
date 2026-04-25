@@ -1,44 +1,51 @@
-# Demo Narrative — The 60–90 Second Pitch
+# Demo Narrative — The 5-Sentence MissionOps Pitch
 
-> Verbatim, judge-ready. Memorise this. Beat: problem → environment → moat → evidence → ask.
+> Verbatim, judge-ready. Memorise this. Beat: **mission → before-rollout → after-rollout → numbers → ask**.
 >
-> Source: `idea/Task.md` lines 152–154 (the merged pitch) plus the moat statement at line 169.
+> Source: `FlawsToProduction/Verdict.md` ("Praxis MissionOps"), ADR-16 (MissionOps pivot), ADR-19 (Unsloth/mtGRPO), ADR-20 (outcome × efficiency).
 
 ---
 
-## 1. Spoken pitch (verbatim)
+## 1. The 5-sentence pitch (verbatim, ~50 seconds)
 
-> **"Production incidents can take 4 to 6 hours. Current AI agents fail at step 30 because their context fills up with noise.**
+> **Sentence 1 — Mission.** "Real production incidents take 4 to 6 hours and span runbooks, tickets, and on-call notes. Praxis MissionOps is the only environment where agents have to plan, remember, and recover across that full mission — not just answer one alert."
 >
-> **Praxis forces the agent to manage its own memory — save the important finding, discard the noise, recall what matters when you need it. After step 30, the full log is gone. Only what you chose to remember remains.**
+> **Sentence 2 — Before rollout.** "Here is a baseline Qwen-7B agent. It wanders, queries logs after the context window collapses, never plans, and gets a final score of 0.04."
 >
-> **And we reward the agent for thinking correctly through the whole trajectory, not just solving the final step.**
+> **Sentence 3 — After rollout.** "Here is the same model after one mtGRPO training run on Praxis. It calls `create_plan` early, saves three findings before the cutoff, recovers from a deploy disturbance, submits a consistent post-incident report, and scores 0.31 — a 7.7× lift."
 >
-> **No other environment in this room tests preemptive memory management — and every production AI system needs it."**
+> **Sentence 4 — How.** "Four composable rubrics — Planning, Memory, Recovery, Terminal — score the trajectory. Real Rootly production logs feed the artifacts. Outcome × efficiency stops the agent reward-farming."
+>
+> **Sentence 5 — Ask.** "Anthropic's next Opus could literally train on this. Everything is in the README — Trackio, WandB, the rollouts, and the HF Space."
 
-Time: ~55 seconds spoken at moderate pace. Rehearse to land at 60.
+Time it: aim for **48 seconds** spoken, leaving 12 seconds of breath / pause around the cutoff banner.
 
 ---
 
-## 2. The "after step 30" close (the moat)
+## 2. The before-and-after rollout (the trophy moment)
 
-After the live demo (see [`ScreenplayScript.md`](./ScreenplayScript.md)), close with:
+This is the moment judges remember. We render the comparison live or pre-recorded; either way, both rollouts land in `docs/`:
 
-> **"After step 30, the context is gone. Only what the agent chose to save is available. This forces preemptive memory management — a capability no current benchmark tests, and every production AI system needs."**
+| Artifact | What's in it |
+| --- | --- |
+| `docs/rollout_baseline.txt` | Full text trajectory of baseline Qwen-7B — wandering, no plan, no save_finding, illegal_log_after_cutoff penalty, final score `0.04`. |
+| `docs/rollout_trained.txt`  | Same seed, same mission, after Issue #32 mtGRPO training — `create_plan`, `save_finding` × 3, `[CONTEXT LIMIT]`, `recall_memory`, disturbance hit at step 100, `revise_plan`, `submit_report`, final score `0.31`. |
+| `docs/rollout_compare.png`  | Side-by-side per-turn reward chart, both lines on same axes, baseline flat near 0, trained climbing to ~0.55 cumulative. |
+| `docs/demo.gif`             | 8-second GIF of the moment when `[CONTEXT LIMIT REACHED]` banner appears and the trained agent calls `recall_memory` while baseline panics. |
 
-This is the line that makes Meta judges remember Praxis when they reconvene.
+The README opens with `docs/rollout_compare.png` then `docs/demo.gif` — no slide deck before the visual.
 
 ---
 
 ## 3. The slide deck (5 slides max)
 
-| #   | Title                            | One-line takeaway                                                          |
-| --- | -------------------------------- | -------------------------------------------------------------------------- |
-| 1   | Praxis — Long-Horizon SRE Triage | Agents diagnose 120-step incidents under context pressure.                 |
-| 2   | The Capability Gap               | Real incidents = 4-6 hrs. Agents collapse at step 30 from context bloat.   |
-| 3   | Memory As A Tool                 | `save_finding` + `recall_memory` + cutoff at step 30. Show the banner.     |
-| 4   | Evidence                         | Score gap table (random / no-prompt / SRE-prompt) + reward curve.          |
-| 5   | What's Next                      | PyTorch-native via TRL `environment_factory`; ∞ tasks via procedural seed. |
+| #   | Title                              | One-line takeaway                                                                                        |
+| --- | ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 1   | Praxis MissionOps                  | Long-horizon SRE missions: 80–150 turns, 8 phases, scattered instructions, real Rootly artifacts.        |
+| 2   | The Capability Gap                 | Real incidents are missions. Agents collapse at step 30 from context bloat (memory) and from no plan.    |
+| 3   | The Trophy: before vs after        | `docs/rollout_compare.png` + `docs/demo.gif`. 0.04 → 0.31 after one mtGRPO run.                          |
+| 4   | Composable Rubrics                 | Planning / Memory / Recovery / Terminal at 0.20 / 0.20 / 0.20 / 0.40 weights. Score = outcome × efficiency. |
+| 5   | What's Next + How To Train         | TRL `environment_factory`. Trackio + WandB public run links. ∞ tasks via procedural seed + Rootly draws. |
 
 Slide assets live in [`EvidencePackage.md`](./EvidencePackage.md).
 
@@ -46,49 +53,57 @@ Slide assets live in [`EvidencePackage.md`](./EvidencePackage.md).
 
 ## 4. The README headline
 
-The home page must echo the same beats:
-
 ```
-# Praxis: Long-Horizon SRE Agent Training
-### Where plans span more steps than context windows
+# Praxis MissionOps: long-horizon SRE agent training
+### Plan. Remember. Recover. Score = outcome × efficiency.
 ```
 
-Followed by the "after step 30" demo GIF (Issue #20).
+Followed immediately by `docs/rollout_compare.png` and `docs/demo.gif`. No paragraphs above the fold.
 
 ---
 
 ## 5. Anti-patterns (do not say these)
 
-- ❌ "It's an SRE chatbot" — undersells; we are _training_ infrastructure.
-- ❌ "It's like LangChain memory" — we control memory inside the env, not the framework.
-- ❌ "We'll figure out training later" — the GRPO script + reward curve are the proof.
-- ❌ "We're inspired by AgentBench / SWE-Bench" — judges have those memorised; differentiate on memory cutoff.
+- ❌ "It's an SRE chatbot." — undersells; we are _training_ infrastructure.
+- ❌ "It's like LangChain memory." — we control memory inside the env, not the framework.
+- ❌ "Score is average reward." — judges read `FlawsToProduction`; we use outcome × efficiency now.
+- ❌ "We made up the logs." — say "real Rootly production logs (Apache-2.0)" with attribution.
+- ❌ "Reward is one number." — show the 4-rubric breakdown; that's the moat.
 
 ---
 
-## 6. Three-question Q&A drill
+## 6. Q&A drill (rehearse three answers)
 
-**Q1: "Why is this PyTorch-native?"**
+**Q1: "What changed from your old plan?"**
 
-> "We expose a TRL `environment_factory` — a single import gives `GRPOTrainer` parallel rollouts on Praxis. The reward function is process-aware, so the gradient is informative every step, not just at episode end."
+> "Three things. We rewrote `cascading-platform-failure` from a 120-step incident into a true 150-turn mission with planning, scattered instructions, hidden dependencies, and a disturbance phase that forces recovery. We split the monolithic reward into four composable rubrics. And we shipped real Rootly production logs as the artifact corpus. Everything is documented in `idea/Plan/Project/DecisionLog.md` ADR-16 to ADR-20."
 
-**Q2: "How is this not just another SRE benchmark?"**
+**Q2: "Why mtGRPO instead of plain GRPO?"**
 
-> "Other SRE envs extend the number of steps. We _remove_ information at step 30. Either the agent planned its memory or it fails. That capability gap doesn't exist in any other public env."
+> "Mission rewards are sparse and the trajectory is 80 to 300 turns. Plain GRPO collapses without turn-level credit assignment. mtGRPO with Unsloth gives 2.5× throughput and stable gradients on long-horizon sparse-reward tasks. The reward curve in `docs/reward_curve.png` shows the gap."
 
-**Q3: "Show me reward curves."**
+**Q3: "Show me numbers."**
 
-> Pull up the Trackio dashboard. If GPU credits didn't arrive, show the 3-row inference score gap from `docs/baseline_scores.md` — it's a legitimate 20%-criterion proof per the GRPO survey ("process rewards are more informative than terminal rewards", `idea/Task.md` line 142).
+> "Open the README. Three baseline rows — random, no-prompt, SRE-prompt — score 0.02 / 0.06 / 0.18 under outcome × efficiency. The trained-agent row scores 0.31. Ratio is 7.7×. Same mission, same seed. The Trackio + WandB public run links are right under the table."
 
 ---
 
-## 7. Do this in the first 10 seconds of the pitch
+## 7. The first 10 seconds (visual-first)
 
-Start with the live demo running on the projector. Don't open with a slide. Show:
+Don't open with a slide. Open with `docs/rollout_compare.png` already on the projector.
 
-1. The `cascading-platform-failure` alert firing.
-2. The agent investigating, calling `save_finding key=db_pool value=exhausted`.
-3. Step 30 → the **`[CONTEXT LIMIT REACHED]`** banner appears.
-4. The agent calls `recall_memory` and uses the saved key.
+1. Point at the **baseline** line — flat near zero.
+2. Point at the **trained** line — climbs to ~0.55 cumulative.
+3. Then start sentence 1 of the pitch.
 
-Then start the spoken pitch over the live screen. The visual is what wins the room.
+The visual is what wins the room.
+
+---
+
+## 8. Speaker notes
+
+- The clock matters. Hit the 5 sentences in 50 seconds. Pause 2 seconds after sentence 3 ("a 7.7× lift").
+- When the cutoff banner appears in the live demo, **pause 2 seconds** before speaking.
+- After sentence 5, immediately invite questions — Q&A is where the storytelling 30% lands.
+
+Run-through cadence: 3 silent dry runs of the slide flow + 2 with the spoken track. Total prep ≤ 25 minutes.

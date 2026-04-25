@@ -35,6 +35,7 @@ outputs/evals/
 # - idea/OpenEnv: full OpenEnv reference clone, only used as a local read-only
 #   pattern source. The team pulls OpenEnv from upstream, not from this repo.
 idea/OpenEnv/
+FlawsToProduction/
 
 # Local script we use to install Docker in WSL; not part of the env image.
 get-docker.sh

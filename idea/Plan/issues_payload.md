@@ -1,27 +1,52 @@
-# GitHub Issues — Praxis MissionOps (17 implementation + 1 tracker, format-locked)
+# Issues payload — Praxis MissionOps (Plan v3.0)
 
-> Plan v3.0. 17 implementation issues `#22 → #38` (replaces the original 13 open upstream issues) + 1 tracker `#39` (final submission). Each issue uses a **5-line acceptance template** (5 bullets, hackathon-tight).
+> Ready-to-paste payloads for the 17 implementation issues (`#22 → #38`) and 1 tracker (`#39`). After plan approval, file each issue with `gh issue create` (or use the GitHub web UI). **No GitHub mutations are performed by this plan step** — that happens manually after approval.
 >
-> Review policy ([`Project/DecisionLog.md`](./Project/DecisionLog.md) ADR-11):
-> - Architect (`@GunaPalanivel`) PRs → reviewed by `@Gokul287`.
-> - TechLead (`@Gokul287`) PRs → reviewed by `@GunaPalanivel`.
-> - SDE (`@snehasneha56526-arch`) PRs → reviewed by **both leads + auto PR review**. Sneha is never a reviewer.
+> Source of truth for issue bodies: [`github_issues.md`](./github_issues.md). The tracker (`#39`) body comes from [`Submission/SubmissionChecklist.md`](./Submission/SubmissionChecklist.md) §8.
 >
-> Source IDs (Sx) map to [`Project/EvidenceIndex.md`](./Project/EvidenceIndex.md). Architecture docs that every issue cites live under [`Architecture/`](./Architecture/).
+> Conventions:
+> - Title: `<short user-friendly title>` (matches `github_issues.md` heading minus the `Issue #NN — ` prefix).
+> - Labels: as listed under each issue's `**Labels**:` line.
+> - Owner: per the lane index in `github_issues.md` (Architect / TechLead / SDE).
+> - Reviewers are set automatically by `.github/CODEOWNERS` + `.github/workflows/auto-review.yml` (ADR-11). Do not pass `--reviewer` flags.
+>
+> Filing order (must respect dependencies — see `dependency_graph.md` §3 for the critical path):
+>
+> ```
+> #22 → #23 → #24 → #25 → #26 → #27 → #28 → #29 → #30 → #31 → #32 → #33 → #34 → #35 → #36 → #37 → #38 → #39
+> ```
 
 ---
 
-# Issue #22 — [P0] Safety bundle: asyncio.Lock + slowapi + uvicorn CMD + threshold raise
+## How to file (one block, copy-paste from your shell)
 
-**Labels**: `P0`, `blocker`, `server`, `concurrency`, `safety`
+> Use PowerShell on Windows (the `@'…'@` heredoc syntax). On macOS/Linux, swap to bash heredocs (`<<'EOF' … EOF`). Each block files exactly one issue. **Run them sequentially in the order above** so dependency references in later issues resolve.
 
+```powershell
+# Pre-flight (run once)
+gh auth status        # must be logged in to GunaPalanivel/Praxis
+gh repo view --json name,owner | ConvertFrom-Json
+```
+
+After all 17 implementation issues are filed and merged, file `#39` last so the dependency list is complete.
+
+---
+
+# Issue #22 — Safety bundle: asyncio.Lock + slowapi + uvicorn CMD + threshold raise
+
+**Labels**: `P0`, `blocker`, `server`, `concurrency`, `safety`  ·  **Owner**: Architect (`@GunaPalanivel`)
+
+```powershell
+gh issue create --title "[P0] Safety bundle: asyncio.Lock + slowapi + uvicorn CMD + threshold raise" `
+  --label "P0,blocker,server,concurrency,safety" `
+  --body @'
 ## Context
 
 `FlawsToProduction/Critical Mistakes (Real-World Failures).md` Mistakes 4 / 6 / 8 + S39: `threading.Lock` blocks the FastAPI event loop, no rate limiting, Dockerfile re-imports the app on `python -m server.app`, and `SUCCESS_SCORE_THRESHOLD=0.10` is trivially passable. All four are P0 for a public HF Space facing GRPO rollouts and judges.
 
 ## What to do
 
-1. `server/session_manager.py`: replace `threading.Lock()` with `asyncio.Lock()`; convert `allocate / get / touch / close` to `async`; add `session_timeout_s = 900` TTL eviction in `_evict_expired_unlocked()`. Spec: [`Architecture/ConcurrencyModel.md`](./Architecture/ConcurrencyModel.md) §2 + §4.
+1. `server/session_manager.py`: replace `threading.Lock()` with `asyncio.Lock()`; convert `allocate / get / touch / close` to `async`; add `session_timeout_s = 900` TTL eviction in `_evict_expired_unlocked()`. Spec: `idea/Plan/Architecture/ConcurrencyModel.md` §2 + §4.
 2. `server/app.py`: convert `/reset`, `/step`, `/state` handlers to `async def` and `await manager.*`. Add `slowapi` `Limiter(get_remote_address, default_limits=["120/minute"])`; per-route `60/minute` for `/step`, `30/minute` for `/reset`. Add `pyproject.toml` dep `slowapi>=0.1.9`.
 3. `Dockerfile`: replace `CMD ["python", "-m", "server.app"]` with `CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]`; remove the duplicate `if __name__ == "__main__": uvicorn.run(...)` block from `server/app.py`.
 4. `inference.py`: raise `MAX_TOKENS = 256`, `SUCCESS_SCORE_THRESHOLD = 0.50`; add gate `success = (state.incident_resolved and state.root_cause_identified and final_score >= 0.50)`.
@@ -48,17 +73,23 @@
 - [ ] **Rate limit**: 100 `/step` calls in 60 s from a single IP returns ≥ 1 `429`; valid `Retry-After` header.
 - [ ] **Docker**: `docker run praxis-env:test` startup logs contain exactly one `Uvicorn running on` line.
 - [ ] **Inference gate**: random-baseline rollout with the new threshold yields `success=false` ≥ 95% of seeds.
-- [ ] **Plan docs**: [`Architecture/ConcurrencyModel.md`](./Architecture/ConcurrencyModel.md) §2/§4/§6 marked "shipped"; ADR-16/ADR-20 cross-linked.
+- [ ] **Plan docs**: `idea/Plan/Architecture/ConcurrencyModel.md` §2/§4/§6 marked "shipped"; ADR-16/ADR-20 cross-linked.
+'@
+```
 
 ---
 
-# Issue #23 — [P0] Outcome × efficiency score formula
+# Issue #23 — Outcome × efficiency score formula
 
-**Labels**: `P0`, `reward`, `inference`
+**Labels**: `P0`, `reward`, `inference`  ·  **Owner**: Architect (`@GunaPalanivel`)
 
+```powershell
+gh issue create --title "[P0] Outcome × efficiency score formula" `
+  --label "P0,reward,inference" `
+  --body @'
 ## Context
 
-ADR-20 + `FlawsToProduction/Critical Mistakes` Mistake 9: avg-reward `compute_task_score` makes a 20-step wander tie a 4-step targeted solve. Replace with `score = outcome_quality × (1 − steps/max_steps)` where `outcome_quality = 0` unless `_incident_resolved AND _root_cause_identified`. See [`Architecture/RewardPolicy.md`](./Architecture/RewardPolicy.md) §9.
+ADR-20 + `FlawsToProduction/Critical Mistakes` Mistake 9: avg-reward `compute_task_score` makes a 20-step wander tie a 4-step targeted solve. Replace with `score = outcome_quality × (1 − steps/max_steps)` where `outcome_quality = 0` unless `_incident_resolved AND _root_cause_identified`. See `idea/Plan/Architecture/RewardPolicy.md` §9.
 
 ## What to do
 
@@ -90,24 +121,30 @@ ADR-20 + `FlawsToProduction/Critical Mistakes` Mistake 9: avg-reward `compute_ta
 - [ ] **Clamp**: final score in `[0.01, 0.99]` for all unit-test rows.
 - [ ] **Backwards-compat**: `/state` still returns `cumulative_reward`; `final_score` is an additive field.
 - [ ] **Determinism**: 3× re-run identical seed → byte-identical `final_score`.
-- [ ] **Plan docs**: [`Architecture/RewardPolicy.md`](./Architecture/RewardPolicy.md) §9 marked "shipped"; cross-link ADR-20.
+- [ ] **Plan docs**: `idea/Plan/Architecture/RewardPolicy.md` §9 marked "shipped"; cross-link ADR-20.
+'@
+```
 
 ---
 
-# Issue #24 — [P0] Composable Rubrics refactor (Planning / Memory / Recovery / Terminal)
+# Issue #24 — Composable Rubrics refactor (Planning / Memory / Recovery / Terminal)
 
-**Labels**: `P0`, `reward`, `architecture`
+**Labels**: `P0`, `reward`, `architecture`  ·  **Owner**: Architect (`@GunaPalanivel`)
 
+```powershell
+gh issue create --title "[P0] Composable Rubrics refactor (Planning / Memory / Recovery / Terminal)" `
+  --label "P0,reward,architecture" `
+  --body @'
 ## Context
 
-ADR-18 + judges' verbatim checklist item #13 (_"composable rubrics > monolithic scoring"_). Refactor `server/reward.py` into 4 rubric classes with weights 0.20 / 0.20 / 0.20 / 0.40 summing to 1.0. Existing per-task `event_values` become inputs to the rubrics. Spec: [`Architecture/RewardPolicy.md`](./Architecture/RewardPolicy.md) §8.
+ADR-18 + judges' verbatim checklist item #13 (_"composable rubrics > monolithic scoring"_). Refactor `server/reward.py` into 4 rubric classes with weights 0.20 / 0.20 / 0.20 / 0.40 summing to 1.0. Existing per-task `event_values` become inputs to the rubrics. Spec: `idea/Plan/Architecture/RewardPolicy.md` §8.
 
 ## What to do
 
 1. Create `praxis_env/rubrics/` package: `base.py` (`Rubric` ABC with `name`, `weight`, `score(trajectory)`), `planning.py`, `memory.py`, `recovery.py`, `terminal.py`. Each `score()` returns a value in `[-1.0, 1.0]`.
 2. `server/reward.py::RewardEngine` accepts `rubrics: Sequence[Rubric] = DEFAULT_RUBRIC_BUNDLE`; `score(trajectory)` returns `RewardBreakdown(planning, memory, recovery, terminal, total)`. Engine init asserts `sum(weights) == 1.0`.
 3. `Trajectory` dataclass added in `praxis_env/trajectory.py` carrying step_count, action history, world state delta, memory state, plan state — inputs each rubric reads.
-4. `/step` response `info` includes `breakdown: {"planning": float, "memory": float, "recovery": float, "terminal": float}` per [`Architecture/APIContract.md`](./Architecture/APIContract.md) §3.
+4. `/step` response `info` includes `breakdown: {"planning": float, "memory": float, "recovery": float, "terminal": float}` per `idea/Plan/Architecture/APIContract.md` §3.
 5. `tests/test_rubrics.py` (Issue #34): orthogonality test, weights-sum invariant, each rubric's clamp invariant.
 
 ## Done when
@@ -131,24 +168,30 @@ ADR-18 + judges' verbatim checklist item #13 (_"composable rubrics > monolithic 
 - [ ] **Weights sum to 1.0**: asserted at engine init; raising 0.21 anywhere fails the assert.
 - [ ] **Orthogonality**: setting any one rubric weight to 0.0 drops `RewardBreakdown.total` by exactly `weight × that_rubric_score`.
 - [ ] **Clamp**: `RewardBreakdown.total` always in `[0.01, 0.99]`.
-- [ ] **API parity**: `info.breakdown` keys match [`Architecture/APIContract.md`](./Architecture/APIContract.md) §3 example.
-- [ ] **Plan docs**: [`Architecture/RewardPolicy.md`](./Architecture/RewardPolicy.md) §8 marked "shipped".
+- [ ] **API parity**: `info.breakdown` keys match `idea/Plan/Architecture/APIContract.md` §3 example.
+- [ ] **Plan docs**: `idea/Plan/Architecture/RewardPolicy.md` §8 marked "shipped".
+'@
+```
 
 ---
 
-# Issue #25 — [P0] MissionPlan + planning actions
+# Issue #25 — MissionPlan + planning actions
 
-**Labels**: `P0`, `mission-ops`, `actions`
+**Labels**: `P0`, `mission-ops`, `actions`  ·  **Owner**: TechLead (`@Gokul287`)
 
+```powershell
+gh issue create --title "[P0] MissionPlan + planning actions" `
+  --label "P0,mission-ops,actions" `
+  --body @'
 ## Context
 
-ADR-16 + `FlawsToProduction/Verdict.md`: introduce 5 first-class agent commands (`create_plan`, `revise_plan`, `checkpoint`, `submit_report`, `request_clarification`) and the `MissionPlan` dataclass. Adds `mission_id`, `phase`, `time_budget`, `pending_objectives` to `PraxisObservation`. Spec: [`Architecture/APIContract.md`](./Architecture/APIContract.md) §2 + §2.4 and [`Architecture/DataFlow.md`](./Architecture/DataFlow.md) §7.
+ADR-16 + `FlawsToProduction/Verdict.md`: introduce 5 first-class agent commands (`create_plan`, `revise_plan`, `checkpoint`, `submit_report`, `request_clarification`) and the `MissionPlan` dataclass. Adds `mission_id`, `phase`, `time_budget`, `pending_objectives` to `PraxisObservation`. Spec: `idea/Plan/Architecture/APIContract.md` §2 + §2.4 and `idea/Plan/Architecture/DataFlow.md` §7.
 
 ## What to do
 
 1. `praxis_env/mission_plan.py`: `MissionPlan` dataclass with `milestones: list[str]`, `revisions: int`, `checkpoints_completed: list[str]`, `create / revise / checkpoint(milestone, world_state)` methods.
 2. `server/command_parser.py`: extend `KNOWN_ACTIONS` with the 5 planning commands and their grammars; rate-limit `request_clarification` to 1 per episode.
-3. `praxis_env/models.py`: extend `PraxisObservation` and `PraxisState` with the 4 MissionOps fields per [`Architecture/APIContract.md`](./Architecture/APIContract.md).
+3. `praxis_env/models.py`: extend `PraxisObservation` and `PraxisState` with the 4 MissionOps fields per `idea/Plan/Architecture/APIContract.md`.
 4. `server/praxis_environment.py`: route planning commands to `MissionPlan`; emit `plan.created_pre_cutoff`, `plan.covers_all_root_causes`, `plan.revised_after_evidence`, `checkpoint.consistent`, `submit_report.consistent_with_world_state` reward tags read by the rubrics.
 5. Update `AVAILABLE_COMMANDS` in observations to advertise the 5 new commands.
 
@@ -171,20 +214,26 @@ ADR-16 + `FlawsToProduction/Verdict.md`: introduce 5 first-class agent commands 
 ## Acceptance criteria
 
 - [ ] **Schema**: `extra="forbid"` still passes; new fields are `None` / `[]` for legacy scenarios.
-- [ ] **Reward tags**: each planning command emits exactly one named tag with value matching [`Architecture/ScenarioCatalog.md`](./Architecture/ScenarioCatalog.md) §3.6.
+- [ ] **Reward tags**: each planning command emits exactly one named tag with value matching `idea/Plan/Architecture/ScenarioCatalog.md` §3.6.
 - [ ] **Rate-limit**: 2nd `request_clarification` in same episode is no-op (no negative reward, no extra artifact).
 - [ ] **Determinism**: same `(seed, plan history)` → identical observation deltas.
-- [ ] **Plan docs**: [`Architecture/APIContract.md`](./Architecture/APIContract.md) §2 + §2.4 marked "shipped".
+- [ ] **Plan docs**: `idea/Plan/Architecture/APIContract.md` §2 + §2.4 marked "shipped".
+'@
+```
 
 ---
 
-# Issue #26 — [P0] MissionScenario: phases, scattered, hidden deps, disturbance, recovery
+# Issue #26 — MissionScenario: phases, scattered, hidden deps, disturbance, recovery
 
-**Labels**: `P0`, `mission-ops`, `scenarios`
+**Labels**: `P0`, `mission-ops`, `scenarios`  ·  **Owner**: TechLead (`@Gokul287`)
 
+```powershell
+gh issue create --title "[P0] MissionScenario: phases, scattered, hidden deps, disturbance, recovery" `
+  --label "P0,mission-ops,scenarios" `
+  --body @'
 ## Context
 
-ADR-16. Replaces `MegaIncidentScenario` with `MissionScenario` exposing the 8-phase mission: Intake → Exploration → Planning → Execution → Disturbance → Recovery → Completion → Reflection over `MAX_STEPS=150`, `MEMORY_CUTOFF_OVERRIDE=30`. Hidden dependencies + disturbance injection per [`Architecture/ScenarioCatalog.md`](./Architecture/ScenarioCatalog.md) §3.3.
+ADR-16. Replaces `MegaIncidentScenario` with `MissionScenario` exposing the 8-phase mission: Intake → Exploration → Planning → Execution → Disturbance → Recovery → Completion → Reflection over `MAX_STEPS=150`, `MEMORY_CUTOFF_OVERRIDE=30`. Hidden dependencies + disturbance injection per `idea/Plan/Architecture/ScenarioCatalog.md` §3.3.
 
 ## What to do
 
@@ -216,17 +265,23 @@ ADR-16. Replaces `MegaIncidentScenario` with `MissionScenario` exposing the 8-ph
 - [ ] **Hidden deps**: bypassed-deps trajectory scores strictly lower (≥ 0.05 lower) than dependency-respecting trajectory under same final actions.
 - [ ] **Disturbance**: same seed, fixed action sequence → byte-identical disturbance step + content.
 - [ ] **Resolution gate**: missing any of (3 diagnoses, 3 remediations, consistent report) ⇒ `_incident_resolved=False`.
-- [ ] **Plan docs**: [`Architecture/ScenarioCatalog.md`](./Architecture/ScenarioCatalog.md) §3 marked "shipped".
+- [ ] **Plan docs**: `idea/Plan/Architecture/ScenarioCatalog.md` §3 marked "shipped".
+'@
+```
 
 ---
 
-# Issue #27 — [P0] ArtifactStore + Rootly logs-dataset vendoring
+# Issue #27 — ArtifactStore + Rootly logs-dataset vendoring
 
-**Labels**: `P0`, `mission-ops`, `data`, `compliance`
+**Labels**: `P0`, `mission-ops`, `data`, `compliance`  ·  **Owner**: TechLead (`@Gokul287`)
 
+```powershell
+gh issue create --title "[P0] ArtifactStore + Rootly logs-dataset vendoring" `
+  --label "P0,mission-ops,data,compliance" `
+  --body @'
 ## Context
 
-ADR-17 + S33 + `FlawsToProduction/The Situation First.md`: real Rootly production logs (Apache-2.0) become mission artifacts. Vendor a small sample under `data/artifacts/` with NOTICE.md. Spec: [`Architecture/ScenarioCatalog.md`](./Architecture/ScenarioCatalog.md) §7.
+ADR-17 + S33 + `FlawsToProduction/The Situation First.md`: real Rootly production logs (Apache-2.0) become mission artifacts. Vendor a small sample under `data/artifacts/` with NOTICE.md. Spec: `idea/Plan/Architecture/ScenarioCatalog.md` §7.
 
 ## What to do
 
@@ -258,14 +313,20 @@ ADR-17 + S33 + `FlawsToProduction/The Situation First.md`: real Rootly productio
 - [ ] **License**: NOTICE.md + LICENSE-3rd-party present; CI checks for their existence.
 - [ ] **Provenance**: each `Artifact.source` string includes `rootly:logs-dataset/<file>#L<a>-L<b>`.
 - [ ] **Size**: `du -sh data/artifacts` ≤ 200 KB.
-- [ ] **Plan docs**: [`Architecture/ScenarioCatalog.md`](./Architecture/ScenarioCatalog.md) §7 marked "shipped".
+- [ ] **Plan docs**: `idea/Plan/Architecture/ScenarioCatalog.md` §7 marked "shipped".
+'@
+```
 
 ---
 
-# Issue #28 — [P1] memory-leak scenario integrates Rootly worker-OOM excerpts
+# Issue #28 — memory-leak scenario integrates Rootly worker-OOM excerpts
 
-**Labels**: `P1`, `scenarios`, `data`
+**Labels**: `P1`, `scenarios`, `data`  ·  **Owner**: SDE (`@snehasneha56526-arch`)
 
+```powershell
+gh issue create --title "[P1] memory-leak scenario integrates Rootly worker-OOM excerpts" `
+  --label "P1,scenarios,data" `
+  --body @'
 ## Context
 
 The `memory-leak` scenario already exercises memory cutoff. Wiring Rootly worker-OOM log excerpts via `ArtifactStore` (Issue #27) makes the second-most-shown task feel as authentic as MissionOps for ~30 minutes of work.
@@ -296,17 +357,23 @@ The `memory-leak` scenario already exercises memory cutoff. Wiring Rootly worker
 - [ ] **Size**: observation token count within existing per-step budget.
 - [ ] **Determinism**: same seed → identical worker excerpts.
 - [ ] **Backwards-compat**: existing reward vectors unchanged for memory-only paths.
-- [ ] **Plan docs**: [`Architecture/ScenarioCatalog.md`](./Architecture/ScenarioCatalog.md) §1 row updated.
+- [ ] **Plan docs**: `idea/Plan/Architecture/ScenarioCatalog.md` §1 row updated.
+'@
+```
 
 ---
 
-# Issue #29 — [P0] openenv.yaml + /metadata refresh (tasks, data_sources, rubrics)
+# Issue #29 — openenv.yaml + /metadata refresh (tasks, data_sources, rubrics)
 
-**Labels**: `P0`, `manifest`, `api`
+**Labels**: `P0`, `manifest`, `api`  ·  **Owner**: SDE (`@snehasneha56526-arch`)
 
+```powershell
+gh issue create --title "[P0] openenv.yaml + /metadata refresh (tasks, data_sources, rubrics)" `
+  --label "P0,manifest,api" `
+  --body @'
 ## Context
 
-`openenv.yaml` and `/metadata` must advertise: 6 tasks (with mission `phases`), `supports_concurrent_sessions: true`, `data_sources` (Rootly), and `rubrics` (4 entries summing to 1.0) per [`Architecture/APIContract.md`](./Architecture/APIContract.md) §3.
+`openenv.yaml` and `/metadata` must advertise: 6 tasks (with mission `phases`), `supports_concurrent_sessions: true`, `data_sources` (Rootly), and `rubrics` (4 entries summing to 1.0) per `idea/Plan/Architecture/APIContract.md` §3.
 
 ## What to do
 
@@ -336,17 +403,23 @@ The `memory-leak` scenario already exercises memory cutoff. Wiring Rootly worker
 - [ ] **Schema**: `/metadata` JSON includes both new top-level keys.
 - [ ] **Test**: metadata test asserts rubric weights sum to 1.0.
 - [ ] **Backwards-compat**: legacy clients reading `/metadata.tasks[].name` still get the 6 names.
-- [ ] **Plan docs**: [`Architecture/APIContract.md`](./Architecture/APIContract.md) §3 example matches reality.
+- [ ] **Plan docs**: `idea/Plan/Architecture/APIContract.md` §3 example matches reality.
+'@
+```
 
 ---
 
-# Issue #30 — [P0] 3-row baseline scores + MissionOps SRE prompt
+# Issue #30 — 3-row baseline scores + MissionOps SRE prompt
 
-**Labels**: `P0`, `evidence`, `inference`
+**Labels**: `P0`, `evidence`, `inference`  ·  **Owner**: SDE (`@snehasneha56526-arch`)
 
+```powershell
+gh issue create --title "[P0] 3-row baseline scores + MissionOps SRE prompt" `
+  --label "P0,evidence,inference" `
+  --body @'
 ## Context
 
-`docs/baseline_scores.md` rows 1–3 (random / no-prompt / SRE-prompt) under the new outcome × efficiency formula (#23). Expanded MissionOps system prompt teaches the agent to call `create_plan`, `save_finding`, `recall_memory`, `revise_plan`, `submit_report`. Spec: [`Architecture/RewardPolicy.md`](./Architecture/RewardPolicy.md) §9 + [`Demo/EvidencePackage.md`](./Demo/EvidencePackage.md) §1.
+`docs/baseline_scores.md` rows 1–3 (random / no-prompt / SRE-prompt) under the new outcome × efficiency formula (#23). Expanded MissionOps system prompt teaches the agent to call `create_plan`, `save_finding`, `recall_memory`, `revise_plan`, `submit_report`. Spec: `idea/Plan/Architecture/RewardPolicy.md` §9 + `idea/Plan/Demo/EvidencePackage.md` §1.
 
 ## What to do
 
@@ -360,7 +433,7 @@ The `memory-leak` scenario already exercises memory cutoff. Wiring Rootly worker
 
 - [ ] `docs/baseline_scores.md` has 3 rows: random / no-prompt / SRE-prompt with mean scores + behaviours.
 - [ ] `inference.py --system-prompt sre --runs 5 --seed 2026` reproduces row 3 ± 0.02.
-- [ ] Each row's `behaviour` description grounded in observed trajectories.
+- [ ] Each row''s `behaviour` description grounded in observed trajectories.
 - [ ] Total runtime ≤ 12 min on local CPU (fits under the 20-min judging budget).
 - [ ] 5–8× lift between row 1 and row 3.
 
@@ -378,17 +451,23 @@ The `memory-leak` scenario already exercises memory cutoff. Wiring Rootly worker
 - [ ] **Reproducibility**: 3 reruns per row stay within ± 0.02 mean.
 - [ ] **Determinism**: random_baseline is seedable.
 - [ ] **Format**: table reads correctly in GitHub markdown; `Reproduction commands` block included.
-- [ ] **Plan docs**: [`Demo/EvidencePackage.md`](./Demo/EvidencePackage.md) §1 marked "shipped".
+- [ ] **Plan docs**: `idea/Plan/Demo/EvidencePackage.md` §1 marked "shipped".
+'@
+```
 
 ---
 
-# Issue #31 — [P0] train_praxis_grpo.py with Unsloth + mtGRPO
+# Issue #31 — train_praxis_grpo.py with Unsloth + mtGRPO
 
-**Labels**: `P0`, `training`, `pipeline`
+**Labels**: `P0`, `training`, `pipeline`  ·  **Owner**: TechLead (`@Gokul287`)
 
+```powershell
+gh issue create --title "[P0] train_praxis_grpo.py with Unsloth + mtGRPO" `
+  --label "P0,training,pipeline" `
+  --body @'
 ## Context
 
-ADR-19 + S35: Unsloth GRPO with multi-turn trajectory rewards (mtGRPO) — turn-level credit assignment, ~2.5× throughput, stable on sparse rewards. PEP 723 dependency block; Colab T4/A10G compatible. Diagram: [`Architecture/DataFlow.md`](./Architecture/DataFlow.md) §8.
+ADR-19 + S35: Unsloth GRPO with multi-turn trajectory rewards (mtGRPO) — turn-level credit assignment, ~2.5× throughput, stable on sparse rewards. PEP 723 dependency block; Colab T4/A10G compatible. Diagram: `idea/Plan/Architecture/DataFlow.md` §8.
 
 ## What to do
 
@@ -420,14 +499,20 @@ ADR-19 + S35: Unsloth GRPO with multi-turn trajectory rewards (mtGRPO) — turn-
 - [ ] **Public run**: WandB URL opens without auth.
 - [ ] **mtGRPO**: per-turn credit assignment visible in WandB charts (4 lines for the 4 rubrics).
 - [ ] **Fallback**: `--model qwen-3b` flag works; documented in script header.
-- [ ] **Plan docs**: [`Architecture/DataFlow.md`](./Architecture/DataFlow.md) §8 marked "shipped".
+- [ ] **Plan docs**: `idea/Plan/Architecture/DataFlow.md` §8 marked "shipped".
+'@
+```
 
 ---
 
-# Issue #32 — [P0] Training run + reward_curve + loss_curve + 4th baseline row
+# Issue #32 — Training run + reward_curve + loss_curve + 4th baseline row
 
-**Labels**: `P0`, `evidence`, `training`
+**Labels**: `P0`, `evidence`, `training`  ·  **Owner**: TechLead (`@Gokul287`)
 
+```powershell
+gh issue create --title "[P0] Training run + reward_curve + loss_curve + 4th baseline row" `
+  --label "P0,evidence,training" `
+  --body @'
 ## Context
 
 Execute the run from #31 long enough to produce `docs/reward_curve.png`, `docs/loss_curve.png`, the 4th row in `docs/baseline_scores.md`, and `docs/training_links.md`. Target: ≥ 5× lift baseline → trained.
@@ -462,14 +547,20 @@ Execute the run from #31 long enough to produce `docs/reward_curve.png`, `docs/l
 - [ ] **Plot quality**: x and y axes labeled; legend present; 16:9 aspect.
 - [ ] **Public links**: Trackio + WandB URLs reachable from incognito.
 - [ ] **Determinism**: chart generation script (`scripts/plot_curves.py`) runs from the WandB CSV deterministically.
-- [ ] **Plan docs**: [`Demo/EvidencePackage.md`](./Demo/EvidencePackage.md) §1 + §2 marked "shipped".
+- [ ] **Plan docs**: `idea/Plan/Demo/EvidencePackage.md` §1 + §2 marked "shipped".
+'@
+```
 
 ---
 
-# Issue #33 — [P0] Before/after rollout (the trophy moment)
+# Issue #33 — Before/after rollout (the trophy moment)
 
-**Labels**: `P0`, `evidence`, `demo`
+**Labels**: `P0`, `evidence`, `demo`  ·  **Owner**: TechLead (`@Gokul287`)
 
+```powershell
+gh issue create --title "[P0] Before/after rollout (the trophy moment)" `
+  --label "P0,evidence,demo" `
+  --body @'
 ## Context
 
 ADR-16 / `FlawsToProduction/The Situation First.md` "Single Most Important Thing": the memory-cutoff demo is the trophy. Capture identical-seed rollouts of baseline vs trained agent and ship the comparison as the README hero.
@@ -503,14 +594,20 @@ ADR-16 / `FlawsToProduction/The Situation First.md` "Single Most Important Thing
 - [ ] **Score gap**: trained final score ≥ 4× baseline final score in the captured rollouts.
 - [ ] **Visible behaviour**: trained trajectory contains `create_plan`, `save_finding`, `recall_memory`, `revise_plan`, `submit_report`; baseline contains none or few.
 - [ ] **GIF size**: ≤ 5 MB; loops cleanly; readable text.
-- [ ] **Plan docs**: [`Demo/EvidencePackage.md`](./Demo/EvidencePackage.md) §3 marked "shipped".
+- [ ] **Plan docs**: `idea/Plan/Demo/EvidencePackage.md` §3 marked "shipped".
+'@
+```
 
 ---
 
-# Issue #34 — [P0] Test suite: rubrics + artifacts + mission scenario + concurrency
+# Issue #34 — Test suite: rubrics + artifacts + mission scenario + concurrency
 
-**Labels**: `P0`, `tests`, `quality`
+**Labels**: `P0`, `tests`, `quality`  ·  **Owner**: SDE (`@snehasneha56526-arch`)
 
+```powershell
+gh issue create --title "[P0] Test suite: rubrics + artifacts + mission scenario + concurrency" `
+  --label "P0,tests,quality" `
+  --body @'
 ## Context
 
 Single PR adds the test files spawned by #22, #24, #25, #26, #27. Ensures `pytest -q` stays green and CI gates the rest of the milestone.
@@ -521,7 +618,7 @@ Single PR adds the test files spawned by #22, #24, #25, #26, #27. Ensures `pytes
 2. `tests/test_artifacts.py`: `ArtifactStore.draw()` determinism across (seed, kind, service, n); attribution string format; size check.
 3. `tests/test_task5_mission.py`: 8 phases reachable; hidden-dep failure behavior; disturbance determinism; resolution-gate negative tests; optimal-path final score ≥ 0.40 in deterministic replay.
 4. `tests/test_concurrent_sessions.py`: 8 parallel `httpx.AsyncClient` resets + steps; LRU eviction at session 129; TTL eviction; `slowapi` rate-limit behavior.
-5. `tests/test_memory.py` extension: per-scenario `MEMORY_CUTOFF_OVERRIDE` table from [`Architecture/MemoryModel.md`](./Architecture/MemoryModel.md) §8.
+5. `tests/test_memory.py` extension: per-scenario `MEMORY_CUTOFF_OVERRIDE` table from `idea/Plan/Architecture/MemoryModel.md` §8.
 
 ## Done when
 
@@ -543,14 +640,20 @@ Single PR adds the test files spawned by #22, #24, #25, #26, #27. Ensures `pytes
 - [ ] **Determinism**: all `*_determinism` tests pass byte-equality across 3 reruns.
 - [ ] **Concurrency**: async test passes under `pytest -n 4` parallelism.
 - [ ] **Quality**: `ruff check` + `ruff format --check` green.
-- [ ] **Plan docs**: [`Architecture/ConcurrencyModel.md`](./Architecture/ConcurrencyModel.md) §6 + [`Architecture/RewardPolicy.md`](./Architecture/RewardPolicy.md) §10 marked "shipped".
+- [ ] **Plan docs**: `idea/Plan/Architecture/ConcurrencyModel.md` §6 + `idea/Plan/Architecture/RewardPolicy.md` §10 marked "shipped".
+'@
+```
 
 ---
 
-# Issue #35 — [P1] Determinism + runtime + resource receipts
+# Issue #35 — Determinism + runtime + resource receipts
 
-**Labels**: `P1`, `evidence`, `submission`
+**Labels**: `P1`, `evidence`, `submission`  ·  **Owner**: SDE (`@snehasneha56526-arch`)
 
+```powershell
+gh issue create --title "[P1] Determinism + runtime + resource receipts" `
+  --label "P1,evidence,submission" `
+  --body @'
 ## Context
 
 Phase-1 auto-validation needs `docs/determinism_receipt.txt`, `docs/runtime_receipt.txt`, `docs/resource_receipt.txt` to satisfy DQ rules (S3).
@@ -581,17 +684,23 @@ Phase-1 auto-validation needs `docs/determinism_receipt.txt`, `docs/runtime_rece
 - [ ] **Runtime**: ≤ 20 min total across 6 tasks.
 - [ ] **Memory**: peak RSS ≤ 1.6 GB.
 - [ ] **Format**: receipts plain text, ≤ 100 lines each.
-- [ ] **Plan docs**: [`Demo/EvidencePackage.md`](./Demo/EvidencePackage.md) §5 + §6 marked "shipped".
+- [ ] **Plan docs**: `idea/Plan/Demo/EvidencePackage.md` §5 + §6 marked "shipped".
+'@
+```
 
 ---
 
-# Issue #36 — [P1] GET /benchmark endpoint
+# Issue #36 — GET /benchmark endpoint
 
-**Labels**: `P1`, `server`, `discoverability`
+**Labels**: `P1`, `server`, `discoverability`  ·  **Owner**: SDE (`@snehasneha56526-arch`)
 
+```powershell
+gh issue create --title "[P1] GET /benchmark endpoint" `
+  --label "P1,server,discoverability" `
+  --body @'
 ## Context
 
-ADR-14 / Issue #21 (carried forward). Read-only adapter over `docs/baseline_scores.md` returning model-vs-mean-score JSON. <50 LOC + 3 tests + 30 min. Spec: [`Architecture/APIContract.md`](./Architecture/APIContract.md) §3 ("/benchmark").
+ADR-14 / Issue #21 (carried forward). Read-only adapter over `docs/baseline_scores.md` returning model-vs-mean-score JSON. <50 LOC + 3 tests + 30 min. Spec: `idea/Plan/Architecture/APIContract.md` §3 ("/benchmark").
 
 ## What to do
 
@@ -621,21 +730,27 @@ ADR-14 / Issue #21 (carried forward). Read-only adapter over `docs/baseline_scor
 - [ ] **No 404**: missing-file path returns 200.
 - [ ] **Cache**: parsed list reused across requests; one read at startup.
 - [ ] **Test**: parser handles odd whitespace + extra rows gracefully.
-- [ ] **Plan docs**: [`Architecture/APIContract.md`](./Architecture/APIContract.md) §3 example marked "shipped".
+- [ ] **Plan docs**: `idea/Plan/Architecture/APIContract.md` §3 example marked "shipped".
+'@
+```
 
 ---
 
-# Issue #37 — [P0] HF Space deploy + smoke_test.py + Dockerfile production
+# Issue #37 — HF Space deploy + smoke_test.py + Dockerfile production
 
-**Labels**: `P0`, `deployment`, `submission`
+**Labels**: `P0`, `deployment`, `submission`  ·  **Owner**: Architect (`@GunaPalanivel`)
 
+```powershell
+gh issue create --title "[P0] HF Space deploy + smoke_test.py + Dockerfile production" `
+  --label "P0,deployment,submission" `
+  --body @'
 ## Context
 
 Build a public HF Space hosting the FastAPI server; `tests/smoke_test.py` is the same script judges run during Phase 1 (S3); `Dockerfile` finalised for HF (uvicorn CMD from #22 + uv deps).
 
 ## What to do
 
-1. `tests/smoke_test.py` (move from `mock_validator.py`): runs the §5 sequence from [`Submission/SubmissionChecklist.md`](./Submission/SubmissionChecklist.md) end-to-end against a local uvicorn process.
+1. `tests/smoke_test.py` (move from `mock_validator.py`): runs the §5 sequence from `idea/Plan/Submission/SubmissionChecklist.md` end-to-end against a local uvicorn process.
 2. `Dockerfile` finalisation: multi-stage (uv install → runtime), `WORKDIR /app`, `COPY data/artifacts /app/data/artifacts`, healthcheck.
 3. HF Space repo: push current commit; verify `/health`, `/reset` (`cascading-platform-failure`, seed=2026), `/step` (`create_plan`), `/state`, `/metadata`, `/benchmark`.
 4. Tag the Space with `openenv` per S2.
@@ -661,25 +776,31 @@ Build a public HF Space hosting the FastAPI server; `tests/smoke_test.py` is the
 - [ ] **Smoke**: full §5 script green from a clean clone.
 - [ ] **Cold start**: first `/reset` after wakeup completes < 60 s.
 - [ ] **openenv validate**: PASS against the deployed manifest.
-- [ ] **Plan docs**: [`Submission/SubmissionChecklist.md`](./Submission/SubmissionChecklist.md) §1 ticked.
+- [ ] **Plan docs**: `idea/Plan/Submission/SubmissionChecklist.md` §1 ticked.
+'@
+```
 
 ---
 
-# Issue #38 — [P0] README + mini-blog + slide deck + video
+# Issue #38 — README + mini-blog + slide deck + video
 
-**Labels**: `P0`, `submission`, `storytelling`
+**Labels**: `P0`, `submission`, `storytelling`  ·  **Owner**: Architect (`@GunaPalanivel`)
 
+```powershell
+gh issue create --title "[P0] README + mini-blog + slide deck + video" `
+  --label "P0,submission,storytelling" `
+  --body @'
 ## Context
 
-Storytelling 30%. README opens with `docs/rollout_compare.png` + `docs/demo.gif` + the 5-sentence pitch. Mini-blog and / or video < 2 min are mandatory deliverables (S2). Slide deck ≤ 5 slides per [`Demo/Narrative.md`](./Demo/Narrative.md) §3.
+Storytelling 30%. README opens with `docs/rollout_compare.png` + `docs/demo.gif` + the 5-sentence pitch. Mini-blog and / or video < 2 min are mandatory deliverables (S2). Slide deck ≤ 5 slides per `idea/Plan/Demo/Narrative.md` §3.
 
 ## What to do
 
-1. Rewrite `README.md` per [`Submission/ReleasePackage.md`](./Submission/ReleasePackage.md) §3 link block + [`Submission/SubmissionChecklist.md`](./Submission/SubmissionChecklist.md) §4 contents.
+1. Rewrite `README.md` per `idea/Plan/Submission/ReleasePackage.md` §3 link block + `idea/Plan/Submission/SubmissionChecklist.md` §4 contents.
 2. Publish HF mini-blog: title verbatim from `FlawsToProduction/The Situation First.md` ("_Training LLMs to Remember: Praxis MissionOps and Long-Horizon Operational Reasoning_"). Embed reward curve, one Rootly snippet, before/after rollout.
-3. Record ≤ 2-min video (or fallback to YouTube short) following [`Demo/ScreenplayScript.md`](./Demo/ScreenplayScript.md) §2 cue sheet.
-4. Build 5-slide deck (Google Slides public OR PDF in repo); slide assets per [`Demo/ScreenplayScript.md`](./Demo/ScreenplayScript.md) §4.
-5. All public URLs land in `Submission/ReleasePackage.md` §2.
+3. Record ≤ 2-min video (or fallback to YouTube short) following `idea/Plan/Demo/ScreenplayScript.md` §2 cue sheet.
+4. Build 5-slide deck (Google Slides public OR PDF in repo); slide assets per `idea/Plan/Demo/ScreenplayScript.md` §4.
+5. All public URLs land in `idea/Plan/Submission/ReleasePackage.md` §2.
 
 ## Done when
 
@@ -703,71 +824,90 @@ Storytelling 30%. README opens with `docs/rollout_compare.png` + `docs/demo.gif`
 - [ ] **All links**: tested from incognito.
 - [ ] **Mini-blog**: includes reward curve image + Rootly snippet + before/after rollout link.
 - [ ] **Video**: ≤ 2 min, captioned, hosted on YouTube or HF Spaces video tab.
-- [ ] **Plan docs**: [`Demo/Narrative.md`](./Demo/Narrative.md) + [`Demo/ScreenplayScript.md`](./Demo/ScreenplayScript.md) marked "shipped".
+- [ ] **Plan docs**: `idea/Plan/Demo/Narrative.md` + `idea/Plan/Demo/ScreenplayScript.md` marked "shipped".
+'@
+```
 
 ---
 
 # Issue #39 — [Tracker] Submission checklist (the 20-item judge map)
 
-**Labels**: `tracker`, `submission`
+**Labels**: `tracker`, `submission`, `priority:p0`  ·  **Owner**: Architect (`@GunaPalanivel`)
 
-## Context
+> File this **last**, after #22–#38 are open. The body is the verbatim ready-to-paste block from `idea/Plan/Submission/SubmissionChecklist.md` §8.
 
-Final tracker mapped 1-to-1 to the user's verbatim 20-item judge checklist + the 4 weighted axes (Innovation 40 / Storytelling 30 / Reward 20 / Pipeline 10). Body copied verbatim from [`Submission/SubmissionChecklist.md`](./Submission/SubmissionChecklist.md) §2 — no editing inside this tracker; if the checklist needs updating, update §2 and re-paste.
+```powershell
+gh issue create --title "Tracker — Praxis MissionOps Submission (20-item judge checklist)" `
+  --label "tracker,submission,priority:p0" `
+  --body @'
+## Praxis MissionOps — final submission tracker
 
-## What to do
+This tracker mirrors the 4 weighted hackathon axes (Environment Innovation 40%, Storytelling & Presentation 30%, Reward Improvement 20%, Reward & Training Pipeline 10%). Each implementation issue (#22 → #38) ships one or more checkboxes below. The tracker closes only after every box is green and the submission button is clicked.
 
-- Paste the full §2 of `idea/Plan/Submission/SubmissionChecklist.md` into this issue body verbatim, **including the 20 checkboxes grouped by axis A/B/C/D**.
-- Tick each box only after its referenced implementation issue (from the body) has been merged + the artifact verified.
-- Close this tracker only at submission time.
+### Hard auto-validation gates (DQ if any fail)
 
-## Done when
+- [ ] HF Space `/health` returns `{"status":"healthy"}` from a private window.
+- [ ] `uv run openenv validate` exits 0 on the submitted commit.
+- [ ] `docker build .` succeeds; container `CMD` is `uvicorn server.app:app --host 0.0.0.0 --port 7860`.
+- [ ] `inference.py` runs end-to-end and emits `[START]/[STEP]/[END]` with `score=` field on every line.
+- [ ] 6 tasks ship with deterministic graders: `single-service-alert`, `ambiguous-incident`, `cascading-failure`, `memory-leak`, `cascading-platform-failure` (MissionOps), `procedural-incident`.
+- [ ] Rewards bounded in (0.0, 1.0); `task_score = outcome × efficiency`.
+- [ ] Total runtime < 20 min on vCPU=2 / 8 GB.
+- [ ] Mandatory env vars wired: `API_BASE_URL`, `MODEL_NAME`, `HF_TOKEN`.
+- [ ] OpenAI client used for all LLM calls.
+- [ ] `inference.py` lives at repo root.
 
-- [ ] All 20 boxes ticked.
-- [ ] HF Space URL pinned to the issue body footer.
-- [ ] Submission form submitted; commit hash recorded in the issue.
-- [ ] Trackio + WandB URLs verified public from incognito.
-- [ ] Slack the team the submission preview before clicking "Submit".
+### Axis A — Environment Innovation (40%)
 
-## Depends on
+- [ ] **#1.** MissionOps long-horizon environment — `cascading-platform-failure` ships as 80–150 turn mission with 8 phases (Intake / Exploration / Planning / Execution / Disturbance / Recovery / Completion / Reflection). _(closes #26, references ADR-16)_
+- [ ] **#2.** Real Rootly production logs as mission artifacts — `praxis_env/artifacts.py::ArtifactStore` injects vendored Apache-2.0 Rootly `logs-dataset` excerpts as runbooks, tickets, notes, and log lines; `data/artifacts/NOTICE.md` committed. _(closes #27, references ADR-17)_
+- [ ] **#3.** Scattered instructions across artifacts — root-cause hints split across `runbook` / `ticket` / `note` / `log` artifact kinds; agent never gets a single briefing.
+- [ ] **#4.** Hidden dependencies + Disturbance/Recovery phase — RC #2 blocks RC #1 remediation; deploy disturbance at step ~100 invalidates plan and forces `revise_plan`. `RecoveryRubric` measures detection within ≤ 3 steps.
+- [ ] **#5.** Hard memory cutoff with explicit memory actions — `save_finding`, `recall_memory` are first-class agent commands; full investigation log deleted at `CONTEXT_CUTOFF_STEP`; mission cutoff = 30/150 (20%). _(closes #25)_
+- [ ] **#6.** Composable Rubrics — `PlanningRubric` 0.20 / `MemoryRubric` 0.20 / `RecoveryRubric` 0.20 / `TerminalRubric` 0.40; engine asserts weights sum to 1.0 ± 1e-6; orthogonality tested. _(closes #24, references ADR-18)_
+- [ ] **#7.** Procedural mission generation — `procedural-incident` shipped with seeded determinism + 3 difficulties; `(seed, difficulty)` → byte-identical scenario.
 
-- #22, #23, #24, #25, #26, #27, #28, #29, #30, #31, #32, #33, #34, #35, #36, #37, #38
+### Axis B — Storytelling & Presentation (30%)
 
-## Unblocks
+- [ ] **#8.** Before/after rollout deliverables — `docs/rollout_baseline.txt`, `docs/rollout_trained.txt`, `docs/rollout_compare.png`, `docs/demo.gif` committed; same `mission_id` and seed; lift ≥ 4×. _(closes #33)_
+- [ ] **#9.** 5-sentence pitch lands in ≤ 50 seconds — rehearsed; speaker-notes-ready.
+- [ ] **#10.** README opens with the visual — first content block is `docs/rollout_compare.png` followed by `docs/demo.gif`, then the 5-sentence pitch. _(closes #38)_
+- [ ] **#11.** Mini-blog OR YouTube ≤ 2 min — public link in README + `Submission/ReleasePackage.md`.
+- [ ] **#12.** Slide deck (≤ 5 slides) — public Google Slides or PDF in repo.
+- [ ] **#13.** Q&A drill prepared — verbatim answers to the 5 likely judge questions in `idea/Plan/Demo/Narrative.md` §6.
 
-- _(submission)_
+### Axis C — Reward Improvement (20%)
 
-## Acceptance criteria
+- [ ] **#14.** 4-row score gap table — `docs/baseline_scores.md` rows: random / no-prompt / SRE-prompt / mtGRPO-trained; ≥ 4× lift baseline → trained. _(closes #30, #32)_
+- [ ] **#15.** Reward + loss curves — `docs/reward_curve.png` + `docs/loss_curve.png` from ≥ 50 mtGRPO steps; both inline in README. _(closes #32)_
+- [ ] **#16.** Public Trackio + WandB run URLs — `docs/training_links.md` lists both; both public from a private window.
+- [ ] **#17.** Outcome × efficiency score formula — `compute_task_score = outcome × efficiency` with `outcome = 0` unless `_incident_resolved AND _root_cause_identified`; old avg-reward formula removed. _(closes #23, references ADR-20)_
 
-- [ ] **40% Innovation (items #1–#7)**: all ticked.
-- [ ] **30% Storytelling (items #8–#13)**: all ticked.
-- [ ] **20% Reward (items #14–#17)**: all ticked.
-- [ ] **10% Pipeline (items #18–#20)**: all ticked.
-- [ ] **DQ**: all `Hard gates` in [`Submission/SubmissionChecklist.md`](./Submission/SubmissionChecklist.md) §1 green from a clean clone.
+### Axis D — Reward & Training Pipeline (10%)
+
+- [ ] **#18.** `train_praxis_grpo.py` with Unsloth + mtGRPO — turn-level credit assignment over per-rubric event credit; runs end-to-end on Colab T4/A10G. _(closes #31, references ADR-19)_
+- [ ] **#19.** TRL `environment_factory` snippet works — 10–15 line snippet in README copy-pastes-runs against the deployed HF Space.
+- [ ] **#20.** HF Space deploys + `openenv validate` + `inference.py` reproduces — full submission-day smoke (`tests/smoke_test.py`) runs green from a clean clone. _(closes #37)_
+
+### Acceptance
+
+This tracker is the only issue that closes after submission. Closing it is the visible signal that we hit every weighted axis.
 
 ---
 
-## Index — assignment + lane (planning-only; reviewers auto-set by CODEOWNERS)
+**Depends on**: #22, #23, #24, #25, #26, #27, #28, #29, #30, #31, #32, #33, #34, #35, #36, #37, #38
+'@
+```
 
-| #  | Title (one-line)                                                          | Lane / owner | Reviewer(s)            | Priority | Depends on                                |
-| -- | ------------------------------------------------------------------------- | ------------ | ---------------------- | -------- | ----------------------------------------- |
-| 22 | Safety bundle: asyncio.Lock + slowapi + uvicorn CMD + threshold raise     | Architect    | TechLead               | P0       | —                                         |
-| 23 | Outcome × efficiency score formula                                        | Architect    | TechLead               | P0       | #22                                       |
-| 24 | Composable Rubrics refactor                                               | Architect    | TechLead               | P0       | #22, #23                                  |
-| 25 | MissionPlan + planning actions                                            | TechLead     | Architect              | P0       | #22, #24                                  |
-| 26 | MissionScenario phase machine                                             | TechLead     | Architect              | P0       | #24, #25                                  |
-| 27 | ArtifactStore + Rootly vendoring                                          | TechLead     | Architect              | P0       | #26                                       |
-| 28 | memory-leak Rootly excerpts                                               | SDE          | Architect + TechLead   | P1       | #27                                       |
-| 29 | openenv.yaml + /metadata refresh                                          | SDE          | Architect + TechLead   | P0       | #24, #26, #27                             |
-| 30 | 3-row baseline scores                                                     | SDE          | Architect + TechLead   | P0       | #23, #25, #26                             |
-| 31 | train_praxis_grpo.py Unsloth + mtGRPO                                     | TechLead     | Architect              | P0       | #24, #25, #26                             |
-| 32 | Training run + curves + 4th row                                           | TechLead     | Architect              | P0       | #30, #31                                  |
-| 33 | Before/after rollout                                                      | TechLead     | Architect              | P0       | #32                                       |
-| 34 | Test suite (rubrics/artifacts/mission/concurrency)                        | SDE          | Architect + TechLead   | P0       | #22, #24, #25, #26, #27                   |
-| 35 | Determinism + runtime + resource receipts                                 | SDE          | Architect + TechLead   | P1       | #34                                       |
-| 36 | GET /benchmark endpoint                                                   | SDE          | Architect + TechLead   | P1       | #29, #32                                  |
-| 37 | HF Space + smoke_test + Dockerfile prod                                   | Architect    | TechLead               | P0       | #22, #29, #34, #35, #36                   |
-| 38 | README + mini-blog + slide deck + video                                   | Architect    | TechLead               | P0       | #32, #33, #36, #37                        |
-| 39 | Submission tracker (20-item judge checklist)                              | Architect    | TechLead               | tracker  | all of #22–#38                            |
+---
 
-Lane abbreviations: Architect = `@GunaPalanivel`; TechLead = `@Gokul287`; SDE = `@snehasneha56526-arch`.
+## Verification after filing
+
+```powershell
+gh issue list --state open --label P0 --limit 50
+gh issue list --state open --label tracker --limit 5
+```
+
+The expected output: 13 P0 issues (`#22-#27`, `#29-#34`, `#37-#38`), 4 P1 issues (`#28`, `#35`, `#36`, plus tail), and 1 tracker (`#39`) — matching the issue index in `github_issues.md` §"Index — assignment + lane".
+
+For lane / reviewer / dependency details, see [`dependency_graph.md`](./dependency_graph.md). For the wave timeline, see [`implementation_plan.md`](./implementation_plan.md) §6.

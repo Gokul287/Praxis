@@ -1,144 +1,183 @@
-# Dependency Graph -- 21-Issue Wave Plan
+# Dependency Graph — Praxis MissionOps (Plan v3.0)
 
-> Three lanes (Guna / Gokul / Sneha) so the leads ship in parallel after #1
-> lands. Quality > parallelism: a reviewer can hold a lane indefinitely. See
-> `Project/DecisionLog.md` ADR-11 for the review policy.
+> 17 implementation issues `#22 → #38` + 1 tracker `#39`. Three lanes
+> (Architect / TechLead / SDE) per ADR-11. Critical path = the longest
+> Architect+TechLead chain through MissionOps + training + submission.
 
 ---
 
-## 1. Issue dependency DAG
+## 1. DAG (Mermaid)
 
 ```mermaid
-graph TD
-    I1[#1 Sessions] --> I2[#2 Schema]
-    I1 --> I3[#3 PraxisMemory]
-    I3 --> I4[#4 Parser actions]
-    I3 --> I5[#5 Reward memory events]
-    I3 --> I6[#6 Env hook + cutoff]
-    I4 --> I6
-    I5 --> I6
-    I1 --> I7[#7 Mega-incident]
-    I6 --> I7
-    I1 --> I8[#8 Procedural generator]
-    I7 --> I9[#9 Registry + openenv.yaml]
-    I8 --> I9
-    I1 --> I10[#10 SRE prompt + score gap]
-    I10 --> I11[#11 GRPO training script]
-    I11 --> I12[#12 50-step run + reward_curve.png]
-    I3 --> I13[#13 Memory tests]
-    I7 --> I14[#14 Mega + procedural tests]
-    I8 --> I14
-    I1 --> I15[#15 Concurrent-session tests]
-    I16[#16 mock_validator cleanup]
-    I9 --> I17[#17 Full server validation]
-    I13 --> I17
-    I14 --> I17
-    I15 --> I17
-    I17 --> I18[#18 Dockerfile + HF deploy]
-    I18 --> I19[#19 README rewrite]
-    I12 --> I19
-    I19 --> I20[#20 Demo + blog/video + slides]
-    I1 --> I21[#21 GET /benchmark]
-    I10 --> I21
-    I21 --> I19
+flowchart LR
+    classDef arch fill:#1f77b4,color:#fff
+    classDef tech fill:#2ca02c,color:#fff
+    classDef sde  fill:#ff7f0e,color:#fff
+    classDef trk  fill:#7f7f7f,color:#fff
+
+    %% Wave 0 (P0 blocker)
+    I22[#22 Safety bundle<br/>asyncio.Lock + slowapi<br/>+ uvicorn CMD + thresholds]:::arch
+
+    %% Wave 1 (reward foundation)
+    I23[#23 Outcome × efficiency<br/>score formula]:::arch
+    I24[#24 Composable Rubrics<br/>refactor]:::arch
+
+    %% Wave 2 (MissionOps)
+    I25[#25 MissionPlan +<br/>planning actions]:::tech
+    I26[#26 MissionScenario<br/>phases + scattered + recovery]:::tech
+    I27[#27 ArtifactStore +<br/>Rootly vendoring]:::tech
+
+    %% Wave 3 (integration)
+    I28[#28 memory-leak +<br/>Rootly excerpts]:::sde
+    I29[#29 openenv.yaml<br/>+ /metadata]:::sde
+
+    %% Wave 4 (evidence)
+    I30[#30 3-row baseline<br/>scores]:::sde
+    I31[#31 train_praxis_grpo.py<br/>Unsloth + mtGRPO]:::tech
+    I32[#32 Training run<br/>+ curves + 4th row]:::tech
+    I33[#33 Before/after rollout<br/>trophy moment]:::tech
+
+    %% Wave 5 (quality + benchmark)
+    I34[#34 Test suite<br/>rubrics + artifacts + mission]:::sde
+    I35[#35 Determinism + runtime<br/>+ resource receipts]:::sde
+    I36[#36 GET /benchmark]:::sde
+
+    %% Wave 6 (submission)
+    I37[#37 HF Space + smoke +<br/>Dockerfile prod]:::arch
+    I38[#38 README + mini-blog<br/>+ slide deck + video]:::arch
+
+    %% Tracker
+    I39[#39 Submission tracker<br/>20-item judge checklist]:::trk
+
+    %% Edges
+    I22 --> I23 --> I24
+    I22 --> I25
+    I24 --> I25
+    I24 --> I26
+    I25 --> I26
+    I26 --> I27
+    I27 --> I28
+    I24 --> I29
+    I26 --> I29
+    I27 --> I29
+
+    I23 --> I30
+    I25 --> I30
+    I26 --> I30
+    I24 --> I31
+    I25 --> I31
+    I26 --> I31
+    I30 --> I32
+    I31 --> I32
+    I32 --> I33
+
+    I22 --> I34
+    I24 --> I34
+    I25 --> I34
+    I26 --> I34
+    I27 --> I34
+    I34 --> I35
+    I29 --> I36
+    I32 --> I36
+
+    I22 --> I37
+    I29 --> I37
+    I34 --> I37
+    I35 --> I37
+    I36 --> I37
+    I32 --> I38
+    I33 --> I38
+    I36 --> I38
+    I37 --> I38
+
+    I22 --> I39
+    I23 --> I39
+    I24 --> I39
+    I25 --> I39
+    I26 --> I39
+    I27 --> I39
+    I28 --> I39
+    I29 --> I39
+    I30 --> I39
+    I31 --> I39
+    I32 --> I39
+    I33 --> I39
+    I34 --> I39
+    I35 --> I39
+    I36 --> I39
+    I37 --> I39
+    I38 --> I39
 ```
 
 ---
 
-## 2. Lane assignment (parallel-safe)
+## 2. Lane assignment + reviewers
 
-```mermaid
-flowchart TB
-    subgraph Guna[Guna lane -- Architect, reviewed by Gokul]
-        G1[#1 Sessions]
-        G2[#2 Schema]
-        G3[#3 PraxisMemory]
-        G6[#6 Env hook]
-        G19[#19 README rewrite]
-    end
+ADR-11 review policy ([`Project/DecisionLog.md`](./Project/DecisionLog.md)). Reviewers auto-set by `.github/CODEOWNERS` + `.github/workflows/auto-review.yml`.
 
-    subgraph Gokul[Gokul lane -- TechLead, reviewed by Guna]
-        K7[#7 Mega-incident]
-        K8[#8 Procedural]
-        K10[#10 SRE prompt]
-        K11[#11 GRPO script]
-        K12[#12 Reward curve]
-        K18[#18 HF deploy]
-        K20[#20 Demo + media]
-        K21[#21 GET /benchmark]
-    end
+| Lane (owner)                       | Issues                              | Total | Reviewers              |
+| ---------------------------------- | ----------------------------------- | ----- | ---------------------- |
+| **Architect** (`@GunaPalanivel`)   | #22, #23, #24, #37, #38, #39        | 6     | TechLead               |
+| **TechLead** (`@Gokul287`)         | #25, #26, #27, #31, #32, #33        | 6     | Architect              |
+| **SDE** (`@snehasneha56526-arch`)  | #28, #29, #30, #34, #35, #36        | 6     | Architect + TechLead   |
 
-    subgraph Sneha[Sneha lane -- SDE, reviewed by Guna + Gokul + auto PR]
-        S4[#4 Parser actions]
-        S5[#5 Reward events]
-        S9[#9 Registry + yaml]
-        S13[#13 Memory tests]
-        S14[#14 Scenario tests]
-        S15[#15 Concurrent tests]
-        S16[#16 Cleanup]
-        S17[#17 Server validation]
-    end
-
-    G1 --> G2
-    G1 --> G3
-    G3 --> G6
-    G19 --> Submit
-
-    G1 --> K7
-    K7 --> K8
-    K8 --> K10
-    K10 --> K11
-    K11 --> K12
-    K18 --> K20
-    K10 --> K21
-    K21 --> G19
-
-    G3 --> S4
-    G3 --> S5
-    K8 --> S9
-    G6 --> S13
-    K8 --> S14
-    G6 --> S15
-    S14 --> S17
-    S17 --> K18
-    K12 --> G19
-```
+Three lanes × 6 issues each = 18 (17 implementation + 1 architect-owned tracker). Balanced for parallel execution.
 
 ---
 
-## 3. Critical path (single longest chain)
+## 3. Critical path
 
 ```
-#1 -> #3 -> #6 -> #7 -> #9 -> #17 -> #18 -> #19 -> #20
+#22 → #24 → #25 → #26 → #31 → #32 → #33 → #38 → #39
 ```
 
-Roughly 9 hours wall-clock with buffer. Anything off this chain is parallel-safe.
+This is the longest chain that gates submission. **Every other issue can be parallelised against this chain**:
+
+- `#23` runs in parallel with `#25/#26` after `#22`.
+- `#27` branches off `#26` and runs in parallel with `#28/#29/#30`.
+- `#34` (test suite) runs as soon as `#22 + #24 + #25 + #26 + #27` are merged.
+- `#37` runs in parallel with `#38` once `#34/#35/#36` land.
+
+Critical-path estimated wall-clock (single owner per node, no parallelism penalty): ~10–11 hours sequential. With three lanes and aggressive parallelism, target wall-clock ~12–15 hours.
 
 ---
 
-## 4. Wave-by-wave assignment table
+## 4. Wave timeline (T+0 → T+15h)
 
-| Wave | Time slot      | Guna (Architect)          | Gokul (TechLead)                  | Sneha (SDE)                        |
-| ---- | -------------- | ------------------------- | --------------------------------- | ---------------------------------- |
-| 1    | T+0:00 -> 1:00 | **#1 Sessions (BLOCKER)** | --                                | --                                 |
-| 2    | T+1:00 -> 2:00 | #2 Schema                 | #7 Mega-incident (start)          | --                                 |
-| 3    | T+2:00 -> 3:30 | #3 PraxisMemory           | #7 Mega-incident (finish)         | #4 Parser actions                  |
-| 4    | T+3:30 -> 4:30 | #6 Env hook               | #8 Procedural generator           | #5 Reward events                   |
-| 5    | T+4:30 -> 5:30 | --                        | #10 SRE prompt + score gap        | #9 Registry + yaml; #13 Mem tests  |
-| 6    | T+5:30 -> 6:30 | --                        | #11 GRPO script                   | #14 Scenario tests; #15 Concurrent |
-| 7    | T+6:30 -> 7:30 | --                        | #12 Reward curve (if GPU)         | #16 Cleanup; #17 Server validation |
-| 8    | T+7:30 -> 8:30 | #19 README rewrite        | #18 HF deploy; #21 GET /benchmark | --                                 |
-| 9    | T+8:30 -> 9:00 | --                        | #20 Demo + media                  | --                                 |
+| Wave | Time window  | Issues running                                         | Primary owner | Outputs                                                     |
+| ---- | ------------ | ------------------------------------------------------ | ------------- | ----------------------------------------------------------- |
+| W0   | T+0  → T+1h  | #22                                                    | Architect     | asyncio.Lock + slowapi + uvicorn CMD + thresholds merged    |
+| W1   | T+1h → T+2h  | #23 (Architect) ‖ #25 design start (TechLead)          | Architect     | Score formula merged                                        |
+| W2   | T+2h → T+4h  | #24 ‖ #25                                              | Architect+TL  | Composable Rubrics + MissionPlan + planning actions merged  |
+| W3   | T+4h → T+6h  | #26 (TL) ‖ #29 (SDE) ‖ #30 starts (SDE)               | TechLead      | MissionScenario phase machine + manifest refresh            |
+| W4   | T+6h → T+8h  | #27 (TL) ‖ #28 (SDE) ‖ #34 (SDE)                      | TechLead      | ArtifactStore + Rootly + memory-leak excerpts + tests       |
+| W5   | T+8h → T+11h | #31 (TL) ‖ #30 (SDE) ‖ #35 (SDE) ‖ #36 (SDE)          | TechLead      | Trainer + 3-row baseline + receipts + /benchmark            |
+| W6   | T+11h → T+13h| #32 (TL) ‖ #37 (Arch) ‖ #33 (TL)                       | TechLead+Arch | Training curves + 4th baseline row + rollout + HF Space     |
+| W7   | T+13h → T+15h| #38 (Arch) ‖ final smoke (Arch)                       | Architect     | README + blog + slides + video; #39 tracker closed; submit  |
 
-Sneha's PRs are reviewed by **both leads + auto PR review**; Guna's by Gokul; Gokul's by Guna.
-
-`#21 GET /benchmark` is a thin read-only endpoint (depends on `#10` for `docs/baseline_scores.md` content and `#1` for the FastAPI app shape); it parallel-runs with `#18` in Gokul's Wave-8 tail and unblocks the README link block in `#19`. Quality > parallelism still applies.
+Buffer baked in: each wave has 30 min of overflow before the next critical-path issue starts. If any P0 slips, drop P1 work (#28, #35, #36) before delaying critical path.
 
 ---
 
-## 5. Hard rules
+## 5. Risk register (per-issue)
 
-- A PR cannot merge until its **Depends on** issues are closed.
-- A PR cannot merge until required reviewers approve (per ADR-11).
-- A PR cannot merge unless the **Plan docs to update** checklist in its body is satisfied (plan == reality).
-- A PR cannot merge if it regresses the existing 289-test baseline.
+| Risk                                                                | Mitigation                                                                                          |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| #22 async refactor breaks existing tests                            | Feature-flag old `threading.Lock` path for one PR cycle; remove only after #34 green.                |
+| #24 rubric weights drift from 1.0                                   | Engine init asserts; CI fails if drift detected.                                                     |
+| #25/#26 phase-machine determinism flake                             | Seed all randoms via `(mission_id, seed)`; #34 has `*_determinism` tests.                            |
+| #27 Rootly license / PII risk                                       | Vendored sample only; GitGuardian on `data/artifacts/`; NOTICE.md mandatory.                         |
+| #31 Unsloth incompatible with chosen model                          | Fallback path via TRL GRPO + `turn_reward_aggregator` shim; documented in script header.             |
+| #32 GPU credits don't arrive                                        | 3-row baseline (#30) covers ~70% of reward axis (S30); README explicit fallback note.                |
+| #33 rollout doesn't show ≥ 4× lift                                  | Re-pick seed; tune SRE prompt in #30; if still flat, ship 3 rollouts and pick the most demonstrative.|
+| #37 HF Space cold-start ≥ 60 s                                      | Reduce model load eagerness; cache `data/artifacts/` index; warm-up `/health` ping in CI.            |
+| #38 video runtime drift > 2:00                                      | Cut to 90 s shorts; mini-blog absorbs the rest.                                                      |
+
+---
+
+## 6. Cross-doc links
+
+- Issues: [`github_issues.md`](./github_issues.md)
+- Implementation timeline detail: [`implementation_plan.md`](./implementation_plan.md)
+- Submission gates: [`Submission/SubmissionChecklist.md`](./Submission/SubmissionChecklist.md)
+- Decisions driving the DAG shape: [`Project/DecisionLog.md`](./Project/DecisionLog.md) ADR-16 → ADR-20.

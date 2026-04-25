@@ -13,14 +13,14 @@
 
 ## 1. Catalog at a glance
 
-| #   | Task                         | Difficulty    | `MAX_STEPS` | Memory cutoff | Target optimal | Status             |
-| --- | ---------------------------- | ------------- | ----------- | ------------- | -------------- | ------------------ |
-| 1   | `single-service-alert`       | easy          | 15          | n/a (≥15)     | ~0.63          | shipped            |
-| 2   | `ambiguous-incident`         | medium        | 25          | 30 (n/a)      | ~0.71          | shipped            |
-| 3   | `cascading-failure`          | hard          | 20          | 30 (n/a)      | ~0.46          | shipped            |
-| 4   | `memory-leak`                | hard          | 25          | 20            | ~0.48          | shipped            |
-| 5   | `cascading-platform-failure` | hard          | 120         | 30            | ~0.55          | **NEW (Issue #7)** |
-| 6   | `procedural-incident`        | easy/med/hard | 15/25/50    | 8/15/25       | scaled         | **NEW (Issue #8)** |
+| #   | Task                         | Difficulty    | `MAX_STEPS` | Memory cutoff | Target optimal | Status                 |
+| --- | ---------------------------- | ------------- | ----------- | ------------- | -------------- | ---------------------- |
+| 1   | `single-service-alert`       | easy          | 15          | n/a (≥15)     | ~0.63          | shipped                |
+| 2   | `ambiguous-incident`         | medium        | 25          | 30 (n/a)      | ~0.71          | shipped                |
+| 3   | `cascading-failure`          | hard          | 20          | 30 (n/a)      | ~0.46          | shipped                |
+| 4   | `memory-leak`                | hard          | 25          | 20            | ~0.48          | shipped + Rootly artifacts (Issue #27) |
+| 5   | `cascading-platform-failure` | mission       | 150         | 30            | ~0.55          | **MissionOps (Issues #25, #26, #27)** |
+| 6   | `procedural-incident`        | easy/med/hard | 15/25/50    | 8/15/25       | scaled         | shipped (Issue #8)     |
 
 All scenarios extend [`praxis_env/scenarios/base.BaseScenario`](../../../praxis_env/scenarios/base.py); rewards remain in `[0.01, 0.99]` per `clamp_reward()`.
 
@@ -52,11 +52,28 @@ Detailed designs live in [`idea/Architecture/scenario_design.md`](../../Architec
 
 ---
 
-## 3. NEW Scenario 5 — `cascading-platform-failure` (mega-incident)
+## 3. MissionOps Mega-Mission — `cascading-platform-failure` (Issues #25, #26)
 
-The headline Theme #2 task. 120 steps, 8 services, **3 simultaneous root causes**, 6 red herrings, sparse milestone rewards.
+> Pivoted from "120-step incident" to a **true mission** per ADR-16 / `FlawsToProduction/Verdict.md`. Long-horizon (80–150 turns), multi-phase, scattered instructions, hidden dependencies, real Rootly log artifacts (Issue #27, ADR-17).
 
-### 3.1 Topology
+### 3.1 Mission shape
+
+```
+Phase            Steps    Agent objectives                                            Pressure
+──────────────── ──────── ─────────────────────────────────────────────────────────── ────────
+Intake           1–8      Read on-call ticket + alert chain.                          P1
+Exploration      9–35     Investigate ≥4 services; collect ≥3 artifact excerpts.      P1→P0 at 30
+Planning         36–55    `create_plan` covering ≥3 root causes + milestone order.    P0
+Execution        56–95    Diagnose RCs in plan order; checkpoint after each.          P0
+Disturbance      ~96–105  Injected secondary incident (random of 3); plan invalid.    P0
+Recovery         106–125  `revise_plan`; rollback if needed; re-execute.              P0
+Completion       126–145  `submit_report` consistent with world state.                P0
+Reflection       146–150  (Optional) `recall_memory` to summarise lessons.            —
+```
+
+`MAX_STEPS = 150`; `MEMORY_CUTOFF_OVERRIDE = 30`. Severity escalates from P1 to P0 at step 30 (the cutoff) — chosen so memory pressure and severity pressure align.
+
+### 3.2 Topology + scattered instructions
 
 ```mermaid
 graph TD
@@ -70,62 +87,87 @@ graph TD
     Worker --> Queue
     DNS --> All[All services]
 
+    Runbook[Runbook §3.2 RC #2 location]
+    Ticket[Ticket #4827 RC #3 location]
+    Note[On-call note RC #1 location]
+
+    User -. "instructions scattered across" .-> Runbook
+    User -. "instructions scattered across" .-> Ticket
+    User -. "instructions scattered across" .-> Note
+
     classDef rc fill:#000,color:#fff
     class Database,CDN,Worker rc
 ```
 
-Services: `api`, `auth`, `database`, `cache`, `worker`, `queue`, `cdn`, `dns`. Bold = root-cause source.
+The agent never gets a single "here are the 3 root causes" briefing. Each of the 3 root causes is hinted in **a different artifact kind** (runbook excerpt, prior-ticket excerpt, on-call note), drawn deterministically by `(mission_id, seed)` from the `ArtifactStore` (Issue #27). The mapping is:
 
-### 3.2 Root causes (must all be diagnosed)
+| Artifact kind | Action that surfaces it | Drawn from |
+| --- | --- | --- |
+| Runbook excerpt | `check_runbook service=<x>` | Vendored `data/artifacts/runbooks/*.md` |
+| Prior-ticket excerpt | `check_runbook service=<x> kind=ticket` (alias) | `data/artifacts/tickets/*.md` |
+| On-call note | Returned alongside `query_logs` for the right service | `data/artifacts/notes/*.md` |
+| Real production log line | `query_logs service=<x>` | Rootly `logs-dataset` sample (Apache-2.0, see §7) |
 
-| Tag                  | Description                                                                                        |
-| -------------------- | -------------------------------------------------------------------------------------------------- |
-| `db_pool_corrupted`  | A migration deployed at T-30 corrupted the connection pool config; new connections drop after 60s. |
-| `cdn_tls_expired`    | TLS cert on the CDN expired at incident start; ~12% of requests fail handshake.                    |
-| `worker_memory_leak` | A batch-size mis-config makes worker heap grow ~80MB/min, OOMs every ~25 min.                      |
+### 3.3 Hidden dependencies
 
-### 3.3 Red herrings
+| Dependency | Surfaced when | Effect |
+| --- | --- | --- |
+| RC #2 (cdn_tls) blocks RC #1 (db_pool) remediation | After `restart_service database` if cdn_tls not diagnosed | Restart fails with `tls_handshake` error in next observation; `RecoveryRubric` rewards the agent for noticing + re-planning. |
+| RC #3 (worker_memory_leak) requires deploy rollback | After `kill_query` if rollback not done | Worker OOMs again ~6 steps later; agent must `rollback_deploy worker` before remediation. |
+| Disturbance phase invalidates 1 of 3 plan milestones | Step ~100 | Agent must `revise_plan` and re-checkpoint. |
 
-`cache_eviction_spike`, `dns_ttl_warning`, `queue_backlog`, `api_latency_symptom`, `auth_token_rotation`, `lb_rebalance` — all real signals, none of them the cause.
+These dependencies are what `RecoveryRubric` measures.
 
-### 3.4 State machine (memory-aware)
+### 3.4 Root causes + remediations
+
+| RC tag | Location of hint | Diagnosis evidence required | Correct remediation |
+| --- | --- | --- | --- |
+| `db_pool_corrupted` | On-call note (random of 3 templates) | ≥3 DB log lines + 1 metric snapshot | `restart_service database` after `cdn_tls` resolved |
+| `cdn_tls_expired` | Runbook §3.2 (random of 3 templates) | TLS cert metric + 1 CDN log line | `restart_service cdn` |
+| `worker_memory_leak` | Prior ticket #482x (random of 3 templates) | Heap-growth metric + 2 worker log lines | `rollback_deploy worker` then `restart_service worker` |
+
+### 3.5 Red herrings
+
+`cache_eviction_spike`, `dns_ttl_warning`, `queue_backlog`, `api_latency_symptom`, `session_drift_rotation`, `lb_rebalance` — real signals, none are the cause. Sampled deterministically per mission seed so trajectories stay reproducible.
+
+### 3.6 Reward milestones (rubric-aware — see RewardPolicy §8)
+
+| Event | Value | Read by rubric |
+| --- | --- | --- |
+| `plan.created_pre_cutoff` | +0.05 | Planning |
+| `plan.covers_all_root_causes` | +0.10 | Planning |
+| `plan.revised_after_evidence` | +0.04 | Planning |
+| `checkpoint.consistent` | +0.02 | Planning |
+| `memory.save_finding.before_cutoff` | +0.05 | Memory |
+| `memory.recall_memory.after_cutoff` | +0.08 | Memory |
+| `recovery.detected_disturbance_within_3_steps` | +0.10 | Recovery |
+| `recovery.rollback_before_restart` | +0.06 | Recovery |
+| `recovery.replan_after_disturbance` | +0.05 | Recovery |
+| `diagnosis.first_correct` | +0.12 | Terminal |
+| `diagnosis.all_correct` | +0.15 | Terminal |
+| `remediation.complete` | +0.20 | Terminal |
+| `remediation.partial` | +0.05 | Terminal |
+| `submit_report.consistent_with_world_state` | +0.20 | Terminal |
+| `time_pressure_cost_per_step` | 0.002 | (subtracted) |
+| `destructive_penalty` | −0.10 | Recovery |
+
+Resolution rule: mission resolves only when (a) all 3 root causes diagnosed AND (b) all 3 corresponding remediations succeed AND (c) `submit_report` consistent with `_root_cause_identified` set + `_incident_resolved=True`. Anything less ⇒ `TerminalRubric.score = 0` ⇒ outcome × efficiency = 0 (ADR-20).
+
+### 3.7 Optimal trajectory sketch (final score ≈ 0.55)
 
 ```
-Steps 1–30   Full context. Investigate + save_finding.
-Steps 31–60  Cutoff fired. Use recall_memory; should ID root cause #1.
-Steps 61–90  Identify root causes #2 and #3 using memory + new evidence.
-Steps 91–120 Remediation phase. Recall the 3 RC tags from memory.
-```
-
-Severity escalates from P1 to P0 at step 84 (70% of MAX_STEPS) via `BaseScenario.get_observation()`'s built-in escalator.
-
-### 3.5 Reward milestones (sparse — design intent)
-
-| Event                         | Value                                       |
-| ----------------------------- | ------------------------------------------- |
-| `diagnosis.first_correct`     | +0.12                                       |
-| `diagnosis.all_correct`       | +0.15                                       |
-| `diagnosis.wrong`             | 0.00                                        |
-| `remediation.complete`        | +0.20                                       |
-| `remediation.partial`         | +0.05                                       |
-| `remediation.wrong`           | 0.00                                        |
-| `escalation.with_evidence`    | +0.10                                       |
-| Investigation events          | +0.01 to +0.03 (sparse on purpose)          |
-| Memory bonuses                | per [`MemoryModel.md`](./MemoryModel.md) §4 |
-| `time_pressure_cost_per_step` | 0.002 (cumulative ~0.24 over 120 steps)     |
-| `destructive_penalty`         | −0.10                                       |
-
-Resolution rule: incident resolves only after all 3 root causes are diagnosed AND the 3 corresponding remediations succeed (or evidence-backed escalation after both diagnosis #1 and ≥6 unique investigations).
-
-### 3.6 Optimal path sketch (≈ 0.55)
-
-```
-1-15  Investigate database, cdn, worker
-16-25 save_finding(rc1=db_pool, rc2=cdn_tls, rc3=worker_mem)
-30    [CONTEXT LIMIT REACHED] banner appears
-31-40 recall_memory; diagnose first RC (+0.12)
-50    diagnose second + third (cumulative +0.15)
-80-95 remediate the 3 root causes (+0.20)
+1–8     Read alert + on-call ticket. recall_memory (empty).
+9–28    query_logs + check_runbook + check_metrics across api, db, cdn, worker.
+        save_finding(key=db_pool_hint, value=...) etc.
+29      [CONTEXT LIMIT REACHED] — full log gone, only saved findings remain.
+30–55   create_plan covering 3 RCs with milestone order.
+        revise_plan once after a new artifact contradicts initial guess.
+56–80   Diagnose 3 RCs in dependency order; checkpoint after each.
+81–95   Remediate cdn_tls → db_pool → rollback_deploy worker → restart worker.
+~100    Disturbance: queue backlog spikes; invalidates milestone #4.
+101–110 revise_plan + rollback if needed.
+111–135 Re-execute remediations.
+136–145 submit_report; mission resolves.
 ```
 
 ---
@@ -203,13 +245,94 @@ SCENARIOS = {
 
 ## 6. Test coverage map
 
-| Scenario                   | Test file                                  | New / existing               |
-| -------------------------- | ------------------------------------------ | ---------------------------- |
-| single-service-alert       | `tests/test_task1_single_service_alert.py` | existing                     |
-| cascading-failure          | `tests/test_task2_cascading_failure.py`    | existing                     |
-| ambiguous-incident         | `tests/test_task3_ambiguous_incident.py`   | existing                     |
-| memory-leak                | `tests/test_task4_memory_leak.py`          | existing (extend for cutoff) |
-| cascading-platform-failure | `tests/test_task5_mega_incident.py`        | NEW (Issue #14)              |
-| procedural-incident        | `tests/test_task6_procedural.py`           | NEW (Issue #14)              |
+| Scenario                   | Test file                                  | New / existing                                  |
+| -------------------------- | ------------------------------------------ | ----------------------------------------------- |
+| single-service-alert       | `tests/test_task1_single_service_alert.py` | existing                                        |
+| cascading-failure          | `tests/test_task2_cascading_failure.py`    | existing                                        |
+| ambiguous-incident         | `tests/test_task3_ambiguous_incident.py`   | existing                                        |
+| memory-leak                | `tests/test_task4_memory_leak.py`          | existing + Rootly excerpt smoke test (#27)      |
+| cascading-platform-failure | `tests/test_task5_mission.py`              | NEW (Issues #25, #26) — phase machine, scattered instructions, hidden deps, disturbance, recovery |
+| procedural-incident        | `tests/test_task6_procedural.py`           | shipped                                         |
 
-Determinism tests run each scenario 3× and assert identical reward vectors.
+Determinism tests run each scenario 3× per (seed, difficulty) and assert byte-identical reward vectors and mission artifact draws.
+
+---
+
+## 7. Rootly artifact provenance + license (Issue #27, ADR-17)
+
+### 7.1 Source
+
+- **Dataset**: Rootly AI Labs `logs-dataset` — https://huggingface.co/datasets/Rootly-AI-Labs/logs-dataset
+- **License**: Apache-2.0 (permits redistribution + derivatives; we vendor a small sample with attribution).
+- **Vendored sample size**: ≤ 200 KB of de-duplicated log/ticket/runbook excerpts under `data/artifacts/`; full dataset is NOT shipped.
+- **Why vendored, not downloaded at runtime**: HF Space cold-start latency, offline-judging risk, ToS clarity. ADR-17.
+
+### 7.2 Layout
+
+```
+data/artifacts/
+├── README.md                      # what's in here, how it's used
+├── NOTICE.md                      # Apache-2.0 attribution to Rootly AI Labs (S33)
+├── logs/
+│   ├── api_500s.jsonl             # real production access/error logs
+│   ├── database_pool.jsonl
+│   ├── cdn_tls.jsonl
+│   ├── worker_oom.jsonl
+│   └── ...
+├── runbooks/
+│   ├── db_pool_drain.md
+│   ├── cdn_cert_rotation.md
+│   └── ...
+├── tickets/
+│   ├── ticket_4827_worker_memory.md
+│   └── ...
+└── notes/
+    ├── oncall_db_migration.md
+    └── ...
+```
+
+### 7.3 `ArtifactStore` API (Issue #27)
+
+```python
+# praxis_env/artifacts.py
+from dataclasses import dataclass
+from pathlib import Path
+import random
+
+@dataclass(frozen=True)
+class Artifact:
+    kind: str           # "log" | "runbook" | "ticket" | "note"
+    service: str        # "database" | "cdn" | "worker" | ...
+    body: str           # excerpt content
+    source: str         # e.g. "rootly:logs-dataset/api_500s#L42-L60"
+
+class ArtifactStore:
+    def __init__(self, root: Path, *, seed: int) -> None:
+        self._rng = random.Random(seed)
+        self._root = root
+        self._index: dict[tuple[str, str], list[Artifact]] = {}
+        self._load()
+
+    def _load(self) -> None: ...
+    def draw(self, kind: str, service: str, n: int = 1) -> list[Artifact]: ...
+    def attribution(self) -> str: ...   # for /metadata
+```
+
+Determinism: `(seed, kind, service, n)` always returns the same artifacts in the same order. Tested in `tests/test_artifacts.py`.
+
+### 7.4 Where artifacts surface
+
+| Action | Artifact kinds returned | Scenario use |
+| --- | --- | --- |
+| `query_logs service=<x>` | `log` (1 excerpt) appended to investigation_result | All scenarios that use `ArtifactStore` |
+| `check_runbook service=<x>` | `runbook` (1 excerpt) | MissionOps Exploration phase |
+| `check_runbook service=<x> kind=ticket` | `ticket` (1 excerpt) | MissionOps Exploration phase |
+| Initial `/reset` observation | `note` (on-call note) inlined into `alert_summary` | MissionOps Intake phase |
+
+### 7.5 Compliance checklist (PR #27)
+
+- [ ] `data/artifacts/NOTICE.md` includes Rootly attribution + Apache-2.0 license + commit hash + dataset URL.
+- [ ] `data/artifacts/README.md` documents the vendored subset and exclusion rules (no PII, no secrets — verified by GitGuardian on the data dir).
+- [ ] `LICENSE-3rd-party` updated.
+- [ ] `praxis_env/artifacts.py::ArtifactStore.attribution()` returns the same string surfaced from `/metadata` so judges can read it without opening the repo.
+- [ ] `openenv.yaml` adds `data_sources: [{name: rootly-logs-dataset, license: Apache-2.0, url: ...}]`.
