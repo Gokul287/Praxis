@@ -38,6 +38,7 @@ from praxis_env.models import (
 from praxis_env.memory import PraxisMemory
 from praxis_env.scenarios import get_scenario, list_tasks
 from praxis_env.scenarios.base import BaseScenario
+from praxis_env.trajectory import Trajectory, TrajectoryEvent
 from server.command_parser import parse_command
 from server.reward import MAX_REWARD, MIN_REWARD, RewardEngine, compute_task_score
 
@@ -81,6 +82,7 @@ class PraxisEnvironment:
         self._reward_engine = RewardEngine()
         self._investigation_history: list[str] = []
         self._session_id: str = ""
+        self._trajectory: Trajectory | None = None
 
     @staticmethod
     def resolve_task_name(task_name: str) -> str:
@@ -182,6 +184,10 @@ class PraxisEnvironment:
         self._investigation_history = []
         self._session_id = session_id
         self._scenario.reset(episode_id=episode_id)
+        self._trajectory = Trajectory(
+            task_name=canonical_task_name,
+            max_steps=self._scenario.MAX_STEPS,
+        )
 
         obs = self._scenario.get_observation()
         # Override investigation_result with scenario's initial text
@@ -306,17 +312,40 @@ class PraxisEnvironment:
         if score_cap_reached:
             info["score_cap_reached"] = True
 
+        episode_done = (
+            outcome.done or self._scenario.is_done() or score_cap_reached
+        )
+
+        if self._trajectory is not None:
+            self._trajectory.append(
+                TrajectoryEvent(
+                    step_number=obs.step_number,
+                    action_type=parsed.action_type,
+                    params=dict(parsed.params),
+                    event_tag=info.get("event") if isinstance(info, dict) else None,
+                    reward=float(step_reward),
+                    done=bool(episode_done),
+                    incident_resolved=bool(self._scenario._incident_resolved),
+                    root_cause_identified=bool(
+                        self._scenario._root_cause_identified
+                    ),
+                )
+            )
+            info["breakdown"] = self._reward_engine.score_trajectory(
+                self._trajectory
+            ).to_dict()
+
         logger.debug(
             "step() → reward=%.3f done=%s step=%d",
             step_reward,
-            outcome.done or self._scenario.is_done() or score_cap_reached,
+            episode_done,
             obs.step_number,
         )
 
         result = {
             "observation": self._obs_to_dict(obs),
             "reward": step_reward,
-            "done": outcome.done or self._scenario.is_done() or score_cap_reached,
+            "done": episode_done,
             "info": info,
         }
         return result
