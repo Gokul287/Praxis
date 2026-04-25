@@ -64,6 +64,8 @@ Add `save_finding` and `recall_memory` as agent-callable commands. After step 30
 
 This is the **moat**. The frontier paper (S29) says passive summarisation by the framework fails because the agent never had a chance to express what it considered important. AgeMem (S28) shows GRPO trains naturally on memory-as-tool. Praxis ships exactly this.
 
+Implementation cross-link: `praxis_env/memory.py` (Issue #3). Cutoff behavior details live in [`MemoryModel.md`](../Architecture/MemoryModel.md) §3.
+
 Alternatives considered:
 
 - **SUPO-style automatic summarisation (S22)** — rejected: same failure mode as S29; also would dilute the moat ("nobody else has memory-as-tool").
