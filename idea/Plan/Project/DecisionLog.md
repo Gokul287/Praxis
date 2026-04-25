@@ -157,6 +157,7 @@ Why now: with sparse rewards added in this hackathon push, "diagnose-before-reme
 Implementation:
 
 - `server/reward.py` (Issue #5): `RewardEngine.score(...)` checks `event.startswith("remediation.")` and returns `RewardResult(reward=clamp_reward(0.0), ...)` when `root_cause_identified=False`. New unit test row per task in `tests/test_reward.py::test_remediation_requires_diagnosis`.
+- `tests/test_reward.py` (Issue #5): verifies all default policies include the 6 cross-task memory event tags and includes a 1000-sequence clamp sweep to keep scores within `[0.01, 0.99]`.
 - `MegaIncidentScenario.step` (Issue #7) and `ProceduralIncidentScenario.step` (Issue #8): same guard in the scenario layer for defense-in-depth.
 - Tests (Issue #14): `test_remediation_before_diagnosis_scores_zero` runs against both new scenarios + 3 procedural difficulties.
 
