@@ -23,7 +23,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import math
-from typing import Any
 
 from praxis_env.models import (
     AVAILABLE_COMMANDS,
@@ -212,8 +211,7 @@ class BaseScenario(ABC):
         score = self._score_event("unknown_command")
         return StepOutcome(
             investigation_result=(
-                f"Unknown command: '{raw_command}'\n\n"
-                f"Available commands:\n{available}"
+                f"Unknown command: '{raw_command}'\n\nAvailable commands:\n{available}"
             ),
             reward=score.reward,
             done=self.is_done(),
@@ -226,6 +224,7 @@ class BaseScenario(ABC):
 # ── Param extraction helpers (used by all scenario step() handlers) ───────────
 # Live here so scenarios import from praxis_env.scenarios.base,
 # not from server/ (which would create a circular import).
+
 
 def get_service_param(params: dict[str, str], default: str = "") -> str:
     """Extract and return the 'service' param, lowercased."""

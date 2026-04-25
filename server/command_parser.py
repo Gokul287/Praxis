@@ -24,19 +24,21 @@ import re
 from praxis_env.models import ParsedCommand
 
 # All known action types — anything else is treated as unknown
-KNOWN_ACTIONS: frozenset[str] = frozenset({
-    "query_logs",
-    "check_metrics",
-    "check_deps",
-    "check_config",
-    "check_runbook",
-    "diagnose",
-    "restart_service",
-    "rollback_deploy",
-    "scale_resource",
-    "kill_query",
-    "escalate",
-})
+KNOWN_ACTIONS: frozenset[str] = frozenset(
+    {
+        "query_logs",
+        "check_metrics",
+        "check_deps",
+        "check_config",
+        "check_runbook",
+        "diagnose",
+        "restart_service",
+        "rollback_deploy",
+        "scale_resource",
+        "kill_query",
+        "escalate",
+    }
+)
 
 
 def parse_command(raw: str) -> ParsedCommand:
@@ -107,4 +109,3 @@ def parse_command(raw: str) -> ParsedCommand:
 def is_known_action(action_type: str) -> bool:
     """Return True if the action type is one the environment understands."""
     return action_type.lower() in KNOWN_ACTIONS
-

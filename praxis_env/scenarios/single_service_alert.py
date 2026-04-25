@@ -40,7 +40,6 @@ from praxis_env.scenarios.base import (
     StepOutcome,
     get_metric_param,
     get_service_param,
-    get_timerange_minutes,
 )
 
 
@@ -213,10 +212,16 @@ Recent config changes for database:
 
     # ── Accepted answers ───────────────────────────────────────────────────────
 
-    CORRECT_ROOT_CAUSES = frozenset({
-        "bad_config", "config_typo", "deploy_bad_config",
-        "misconfiguration", "typo", "bad_deploy",
-    })
+    CORRECT_ROOT_CAUSES = frozenset(
+        {
+            "bad_config",
+            "config_typo",
+            "deploy_bad_config",
+            "misconfiguration",
+            "typo",
+            "bad_deploy",
+        }
+    )
 
     CORRECT_REMEDIATION_ACTION = "rollback_deploy"
     CORRECT_REMEDIATION_SERVICE = "auth"
@@ -272,7 +277,12 @@ Triage steps:
             return self._handle_check_runbook(command)
         elif action == "diagnose":
             return self._handle_diagnose(command)
-        elif action in ("restart_service", "rollback_deploy", "scale_resource", "kill_query"):
+        elif action in (
+            "restart_service",
+            "rollback_deploy",
+            "scale_resource",
+            "kill_query",
+        ):
             return self._handle_remediation(command)
         elif action == "escalate":
             return self._handle_escalate(command)
@@ -366,7 +376,9 @@ Triage steps:
         if not duplicate:
             self._done_investigations.add(key)
 
-        score = self._score_event("investigation.check_deps.default", duplicate=duplicate)
+        score = self._score_event(
+            "investigation.check_deps.default", duplicate=duplicate
+        )
 
         return StepOutcome(
             investigation_result=data,
@@ -420,7 +432,9 @@ Triage steps:
         if not duplicate:
             self._done_investigations.add(key)
 
-        score = self._score_event("investigation.check_runbook.default", duplicate=duplicate)
+        score = self._score_event(
+            "investigation.check_runbook.default", duplicate=duplicate
+        )
 
         return StepOutcome(
             investigation_result=data,
@@ -471,7 +485,10 @@ Triage steps:
         service = get_service_param(command.params)
 
         # Correct: rollback the auth deployment
-        if action == self.CORRECT_REMEDIATION_ACTION and service == self.CORRECT_REMEDIATION_SERVICE:
+        if (
+            action == self.CORRECT_REMEDIATION_ACTION
+            and service == self.CORRECT_REMEDIATION_SERVICE
+        ):
             self._incident_resolved = True
             self._current_system_status["auth"] = "healthy"
             self._current_system_status["api"] = "healthy"

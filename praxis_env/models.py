@@ -15,25 +15,27 @@ from typing import Any
 import unicodedata
 
 
-_TEXT_PAYLOAD_TRANSLATIONS = str.maketrans({
-    "\u2013": "-",
-    "\u2014": "-",
-    "\u2018": "'",
-    "\u2019": "'",
-    "\u201c": '"',
-    "\u201d": '"',
-    "\u2026": "...",
-    "\u2190": "<-",
-    "\u2192": "->",
-    "\u2264": "<=",
-    "\u2265": ">=",
-    "\u2248": "approx",
-    "\u26a0": "[WARN]",
-    "\u274c": "[FAIL]",
-    "\u2705": "[OK]",
-    "\U0001F6A8": "[ALERT]",
-    "\ufe0f": "",
-})
+_TEXT_PAYLOAD_TRANSLATIONS = str.maketrans(
+    {
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u2026": "...",
+        "\u2190": "<-",
+        "\u2192": "->",
+        "\u2264": "<=",
+        "\u2265": ">=",
+        "\u2248": "approx",
+        "\u26a0": "[WARN]",
+        "\u274c": "[FAIL]",
+        "\u2705": "[OK]",
+        "\U0001f6a8": "[ALERT]",
+        "\ufe0f": "",
+    }
+)
 
 
 def ensure_ascii_text(text: str) -> str:
@@ -74,11 +76,10 @@ class StepOutcome(BaseModel):
     root_cause_identified: bool
     info: dict[str, Any] = Field(default_factory=dict)
 
-    @model_validator(mode='after')
-    def normalize_text(self) -> 'StepOutcome':
+    @model_validator(mode="after")
+    def normalize_text(self) -> "StepOutcome":
         self.investigation_result = ensure_ascii_text(self.investigation_result)
         return self
-
 
 
 class PraxisAction(BaseModel):
@@ -139,8 +140,8 @@ class PraxisObservation(BaseModel):
     services_affected: list[str]
     step_number: int
 
-    @model_validator(mode='after')
-    def normalize_text(self) -> 'PraxisObservation':
+    @model_validator(mode="after")
+    def normalize_text(self) -> "PraxisObservation":
         self.alert_summary = ensure_ascii_text(self.alert_summary)
         self.investigation_result = ensure_ascii_text(self.investigation_result)
         return self
@@ -188,22 +189,26 @@ AVAILABLE_COMMANDS: list[str] = [
     "escalate reason=<text>",
 ]
 
-VALID_METRICS: frozenset[str] = frozenset({
-    "error_rate",
-    "latency_p95",
-    "throughput",
-    "connections",
-    "memory",
-    "cpu",
-    "resolution_failures",
-    "cache_hit_rate",
-})
+VALID_METRICS: frozenset[str] = frozenset(
+    {
+        "error_rate",
+        "latency_p95",
+        "throughput",
+        "connections",
+        "memory",
+        "cpu",
+        "resolution_failures",
+        "cache_hit_rate",
+    }
+)
 
 VALID_SEVERITIES: frozenset[str] = frozenset({"P0", "P1", "P2", "P3"})
 
-VALID_SERVICE_STATUSES: frozenset[str] = frozenset({
-    "healthy",
-    "degraded",
-    "critical",
-    "down",
-})
+VALID_SERVICE_STATUSES: frozenset[str] = frozenset(
+    {
+        "healthy",
+        "degraded",
+        "critical",
+        "down",
+    }
+)

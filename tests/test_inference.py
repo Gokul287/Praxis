@@ -35,8 +35,7 @@ def test_render_step_line_contract_two_decimal_and_lowercase_bool():
         error=None,
     )
     assert (
-        line
-        == "[STEP] step=2 action=query_logs service=auth timerange=5m "
+        line == "[STEP] step=2 action=query_logs service=auth timerange=5m "
         "reward=0.50 done=false error=null"
     )
 
@@ -180,7 +179,10 @@ def test_emit_step_line_once_emits_on_first_use(capsys):
 
     captured = capsys.readouterr()
     assert did_emit is True
-    assert "[STEP] step=2 action=check_deps service=api reward=0.02 done=false error=null" in captured.out
+    assert (
+        "[STEP] step=2 action=check_deps service=api reward=0.02 done=false error=null"
+        in captured.out
+    )
     assert emitted == {2}
 
 

@@ -35,6 +35,7 @@ from praxis_env.scenarios.base import (
     get_service_param,
 )
 
+
 class MemoryLeakScenario(BaseScenario):
     """Task 4: A worker service crashes repeatedly due to an OOM leak from a bad config."""
 
@@ -111,7 +112,7 @@ Investigate the root cause and remediate the worker instability.\
 08:25:00 [WARN]  Buffer capacity at 80%
 08:30:00 [WARN]  Buffer capacity at 99%, dropping telemetry frames
 (Note: this is a known low-severity issue, unrelated to the worker crashes)
-"""
+""",
     }
 
     _METRICS = {
@@ -141,13 +142,13 @@ error_rate (api)
 memory (metrics-agent)
   Current:  88%
   Pattern:  Slow leak over 2 weeks. Known issue.
-"""
+""",
     }
 
     _DEPS = {
         "api": "api -> worker, database",
         "worker": "worker -> database, cache",
-        "metrics-agent": "Standalone daemonset on all nodes."
+        "metrics-agent": "Standalone daemonset on all nodes.",
     }
 
     _CONFIGS = {
@@ -174,14 +175,28 @@ Typical issues:
         "api": "Check upstream services.",
     }
 
-    CORRECT_ROOT_CAUSES = frozenset({
-        "large_batch_size", "large_batch_size_oom", "batch_size", "batch_size_too_large",
-        "oom", "oom_killed", "memory_leak", "worker_memory_leak"
-    })
+    CORRECT_ROOT_CAUSES = frozenset(
+        {
+            "large_batch_size",
+            "large_batch_size_oom",
+            "batch_size",
+            "batch_size_too_large",
+            "oom",
+            "oom_killed",
+            "memory_leak",
+            "worker_memory_leak",
+        }
+    )
 
-    RED_HERRING_CAUSES = frozenset({
-        "metrics_agent", "metrics_agent_leak", "database_timeout", "db_timeout", "api_deploy"
-    })
+    RED_HERRING_CAUSES = frozenset(
+        {
+            "metrics_agent",
+            "metrics_agent_leak",
+            "database_timeout",
+            "db_timeout",
+            "api_deploy",
+        }
+    )
 
     def _reset_scenario_state(self) -> None:
         self._done_investigations: set[str] = set()
@@ -213,7 +228,7 @@ Typical issues:
                 reward=score.reward,
                 done=self.is_done(),
                 incident_resolved=False,
-                root_cause_identified=self._root_cause_identified
+                root_cause_identified=self._root_cause_identified,
             )
         elif action == "escalate":
             return self._handle_escalate(command)
@@ -223,7 +238,9 @@ Typical issues:
     def get_initial_observation_text(self) -> str:
         return ""
 
-    def _handle_investigate(self, command: ParsedCommand, inv_type: str, source: dict) -> StepOutcome:
+    def _handle_investigate(
+        self, command: ParsedCommand, inv_type: str, source: dict
+    ) -> StepOutcome:
         service = get_service_param(command.params, default="worker")
         data = source.get(service)
 
@@ -267,13 +284,18 @@ Typical issues:
                 incident_resolved=self._incident_resolved,
                 root_cause_identified=self._root_cause_identified,
             )
-            
+
         key = f"metric:{service}:{metric}"
         duplicate = key in self._done_investigations
         if not duplicate:
             self._done_investigations.add(key)
-            
-        score = self._score_event("investigation.check_metrics.worker.memory" if service=='worker' and metric=='memory' else "investigation.check_metrics.default", duplicate=duplicate)
+
+        score = self._score_event(
+            "investigation.check_metrics.worker.memory"
+            if service == "worker" and metric == "memory"
+            else "investigation.check_metrics.default",
+            duplicate=duplicate,
+        )
         return StepOutcome(
             investigation_result=data,
             reward=score.reward,
@@ -318,9 +340,13 @@ Typical issues:
     def _handle_rollback(self, command: ParsedCommand) -> StepOutcome:
         service = get_service_param(command.params)
         if service == "worker":
-            score = self._score_event("remediation.rollback_deploy.worker", resolved=True)
+            score = self._score_event(
+                "remediation.rollback_deploy.worker", resolved=True
+            )
             self._incident_resolved = True
-            self._current_system_status = {k: "healthy" for k in self._current_system_status}
+            self._current_system_status = {
+                k: "healthy" for k in self._current_system_status
+            }
             return StepOutcome(
                 investigation_result="Rollback successful. BATCH_SIZE reverted to 100. Worker stopped crashing. Incident resolved.",
                 reward=score.reward,
@@ -341,9 +367,13 @@ Typical issues:
         service = get_service_param(command.params)
         resource = command.params.get("resource", "").lower()
         if service == "worker" and resource == "memory":
-            score = self._score_event("remediation.scale_resource.worker.memory", resolved=True)
+            score = self._score_event(
+                "remediation.scale_resource.worker.memory", resolved=True
+            )
             self._incident_resolved = True
-            self._current_system_status = {k: "healthy" for k in self._current_system_status}
+            self._current_system_status = {
+                k: "healthy" for k in self._current_system_status
+            }
             return StepOutcome(
                 investigation_result="Worker memory scaled to 8GB. OOMs have ceased, batch size of 5000 is now sustainable. Incident resolved.",
                 reward=score.reward,
@@ -366,7 +396,9 @@ Typical issues:
 
         if investigations >= 3:
             self._incident_resolved = True
-            self._current_system_status = {k: "healthy" for k in self._current_system_status}
+            self._current_system_status = {
+                k: "healthy" for k in self._current_system_status
+            }
             score = self._score_event("escalation.with_evidence", resolved=True)
             return StepOutcome(
                 investigation_result=(
@@ -394,9 +426,14 @@ Typical issues:
             root_cause_identified=self._root_cause_identified,
         )
 
+
 def action_to_event(inv_type: str) -> str:
-    if inv_type == "logs": return "query_logs"
-    if inv_type == "deps": return "check_deps"
-    if inv_type == "config": return "check_config"
-    if inv_type == "runbook": return "check_runbook"
+    if inv_type == "logs":
+        return "query_logs"
+    if inv_type == "deps":
+        return "check_deps"
+    if inv_type == "config":
+        return "check_config"
+    if inv_type == "runbook":
+        return "check_runbook"
     return inv_type

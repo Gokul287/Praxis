@@ -26,11 +26,11 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from praxis_env.models import PraxisAction, PraxisObservation, PraxisState
 from server.praxis_environment import PraxisEnvironment
+from server.session_manager import Session, SessionManager
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -41,30 +41,35 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Global environment instance ────────────────────────────────────────────────
-
-env = PraxisEnvironment()
+# ── Global session manager instance ────────────────────────────────────────────
+manager = SessionManager()
+task_catalog = PraxisEnvironment().list_tasks()
 
 
 # ── Request / Response schemas (Pydantic, for FastAPI validation) ─────────────
 
+
 class ResetRequest(BaseModel):
     """POST /reset body."""
+
     task_name: str = "single-service-alert"
+    seed: int | None = None
 
 
 class StepRequest(BaseModel):
     """POST /step body."""
+
     command: str
 
 
 # ── App factory ───────────────────────────────────────────────────────────────
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown lifecycle."""
     logger.info("Praxis environment server starting up")
-    logger.info("Available tasks: %s", env.list_tasks())
+    logger.info("Available tasks: %s", task_catalog)
     yield
     logger.info("Praxis environment server shutting down")
 
@@ -91,6 +96,16 @@ def create_app() -> FastAPI:
 
     # ── Routes ────────────────────────────────────────────────────────────────
 
+    def _require_session(request: Request) -> tuple[str, Session]:
+        session_id = request.headers.get("x-session-id")
+        if not session_id:
+            raise HTTPException(status_code=400, detail="Missing X-Session-Id header")
+        session = manager.get(session_id)
+        if session is None:
+            raise HTTPException(status_code=400, detail="No active session for that id")
+        manager.touch(session_id)
+        return session_id, session
+
     @app.get("/health")
     async def health() -> dict[str, Any]:
         """Health check — must return 200 for the pre-validation script."""
@@ -99,7 +114,7 @@ def create_app() -> FastAPI:
             "status": "healthy",
             "environment": "praxis-env",
             "version": "1.0.0",
-            "available_tasks": env.list_tasks(),
+            "available_tasks": task_catalog,
         }
 
     @app.get("/metadata")
@@ -112,6 +127,8 @@ def create_app() -> FastAPI:
                 "Production Incident Response Training Ground — simulating real-world "
                 "SRE on-call triage for AI agents."
             ),
+            "supports_concurrent_sessions": True,
+            "themes": ["long-horizon-planning"],
             "tasks": [
                 {"name": "single-service-alert", "difficulty": "easy", "max_steps": 15},
                 {"name": "ambiguous-incident", "difficulty": "medium", "max_steps": 25},
@@ -178,20 +195,29 @@ def create_app() -> FastAPI:
         Includes both wrapped and flat observation fields for compatibility.
         """
         task_name = "single-service-alert"
+        seed: int | None = None
         try:
             body = await request.body()
             if body and body.strip():
                 data = await request.json()
-                task_name = data.get("task_name", "single-service-alert") or "single-service-alert"
+                task_name = (
+                    data.get("task_name", "single-service-alert")
+                    or "single-service-alert"
+                )
+                seed = data.get("seed")
         except Exception:
             pass  # no body or invalid JSON — use default task
 
         try:
-            obs = env.reset(task_name=task_name)
-            obs_dict = PraxisEnvironment._obs_to_dict(obs)
+            allocation = manager.allocate(task_name=task_name, seed=seed)
+            obs_dict = PraxisEnvironment._obs_to_dict(allocation.observation)
             # Return both flat fields AND wrapped observation key
             # so both strict and lenient judges pass
-            return {"observation": obs_dict, **obs_dict}
+            return {
+                "session_id": allocation.session.session_id,
+                "observation": obs_dict,
+                **obs_dict,
+            }
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
@@ -199,7 +225,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=500, detail=f"reset() error: {e}")
 
     @app.post("/step")
-    async def step(request: StepRequest) -> dict[str, Any]:
+    async def step(request: Request, payload: StepRequest) -> dict[str, Any]:
         """
         Execute one action.
 
@@ -207,9 +233,13 @@ def create_app() -> FastAPI:
         Returns: {observation, reward, done, info}
         """
         try:
-            action = PraxisAction(command=request.command)
-            result = env.step(action)
+            _, session = _require_session(request)
+            action = PraxisAction(command=payload.command)
+            with session.lock:
+                result = session.env.step(action)
             return result
+        except HTTPException as e:
+            raise e
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
@@ -217,14 +247,16 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=500, detail=f"step() error: {e}")
 
     @app.get("/state")
-    async def state() -> dict[str, Any]:
+    async def state(request: Request) -> dict[str, Any]:
         """
         Get current episode state.
 
         Returns: PraxisState as JSON
         """
         try:
-            s = env.state()
+            session_id, session = _require_session(request)
+            with session.lock:
+                s = session.env.state()
             return {
                 "episode_id": s.episode_id,
                 "step_count": s.step_count,
@@ -232,6 +264,7 @@ def create_app() -> FastAPI:
                 "incident_resolved": s.incident_resolved,
                 "root_cause_identified": s.root_cause_identified,
                 "cumulative_reward": s.cumulative_reward,
+                "session_id": session_id,
             }
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e))
@@ -239,7 +272,7 @@ def create_app() -> FastAPI:
     @app.get("/tasks")
     async def tasks() -> dict[str, list[str]]:
         """List all available task names."""
-        return {"tasks": env.list_tasks()}
+        return {"tasks": task_catalog}
 
     return app
 

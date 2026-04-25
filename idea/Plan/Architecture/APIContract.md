@@ -234,5 +234,5 @@ When a PR touches the wire, its `Acceptance criteria` must include the line **`A
 ## 6. Backwards-compat guarantees
 
 - The flat-field shape on `/reset` (current `**obs_dict` spread at `server/app.py:194`) is preserved; judges that read `alert_summary` / `system_status` from the top level still pass.
-- Existing 4 task names continue to work and accept `X-Session-Id` optionally during a deprecation window — calls without the header fall back to the most-recently-created session (last-writer-wins) but log a `WARN`.
+- Existing 4 task names continue to work. `POST /step` and `GET /state` now strictly require `X-Session-Id`; missing headers return `400 {"detail":"Missing X-Session-Id header"}`.
 - Reward stays in `[0.01, 0.99]` (judge-safe open interval) per `server/reward.py` `clamp_reward()`.

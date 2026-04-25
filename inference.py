@@ -166,7 +166,9 @@ def render_step_line(
     )
 
 
-def render_end_line(success: bool, steps: int, score: float, rewards: list[float]) -> str:
+def render_end_line(
+    success: bool, steps: int, score: float, rewards: list[float]
+) -> str:
     return (
         f"[END] success={format_bool(success)} steps={steps} score={float(score):.3f} "
         f"rewards={format_rewards_csv(rewards)}"
@@ -278,7 +280,9 @@ def _request_model_command(
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": _build_user_prompt(task_name, step, observation, history),
+                    "content": _build_user_prompt(
+                        task_name, step, observation, history
+                    ),
                 },
             ],
             temperature=TEMPERATURE,
@@ -393,14 +397,26 @@ async def run_episode(task_name: str, client: OpenAI | None) -> EpisodeResult:
 
     total_reward = sum(rewards)
     task_score = compute_task_score(rewards)
-    success = bool((not encountered_fatal) and steps_taken > 0 and total_reward >= SUCCESS_SCORE_THRESHOLD)
-    print(render_end_line(success=success, steps=steps_taken, score=task_score, rewards=rewards), flush=True)
-    return EpisodeResult(success=success, steps=steps_taken, score=task_score, rewards=rewards)
+    success = bool(
+        (not encountered_fatal)
+        and steps_taken > 0
+        and total_reward >= SUCCESS_SCORE_THRESHOLD
+    )
+    print(
+        render_end_line(
+            success=success, steps=steps_taken, score=task_score, rewards=rewards
+        ),
+        flush=True,
+    )
+    return EpisodeResult(
+        success=success, steps=steps_taken, score=task_score, rewards=rewards
+    )
 
 
 def ensure_server_running(url: str) -> subprocess.Popen | None:
     import httpx
     import time
+
     try:
         response = httpx.get(f"{url}/health", timeout=1.0)
         if response.status_code == 200:
@@ -408,13 +424,26 @@ def ensure_server_running(url: str) -> subprocess.Popen | None:
     except Exception:
         pass
 
-    print("[INFO] Starting local environment server for standalone inference...", flush=True)
+    print(
+        "[INFO] Starting local environment server for standalone inference...",
+        flush=True,
+    )
     import sys
     import subprocess
+
     port = url.split(":")[-1].replace("/", "")
-    cmd = [sys.executable, "-m", "uvicorn", "server.app:app", "--port", port, "--host", "127.0.0.1"]
+    cmd = [
+        sys.executable,
+        "-m",
+        "uvicorn",
+        "server.app:app",
+        "--port",
+        port,
+        "--host",
+        "127.0.0.1",
+    ]
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    
+
     start_time = time.time()
     while time.time() - start_time < 15.0:
         try:
@@ -429,7 +458,6 @@ def ensure_server_running(url: str) -> subprocess.Popen | None:
 async def main() -> None:
     server_proc = None
     try:
-        import subprocess
         server_proc = ensure_server_running(PRAXIS_URL)
 
         client = _build_client()

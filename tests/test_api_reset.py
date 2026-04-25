@@ -8,6 +8,7 @@ Guards the judge-critical behavior where /reset must accept:
 """
 
 from fastapi.testclient import TestClient
+from uuid import UUID
 
 from server.app import app
 
@@ -20,6 +21,7 @@ def test_reset_accepts_no_body_and_uses_default_task():
     assert response.status_code == 200
 
     payload = response.json()
+    assert UUID(payload["session_id"]).version == 4
     assert "observation" in payload
     assert payload["step_number"] == 0
     assert payload["severity"] == "P2"
@@ -30,6 +32,7 @@ def test_reset_accepts_empty_json_body_and_uses_default_task():
     assert response.status_code == 200
 
     payload = response.json()
+    assert UUID(payload["session_id"]).version == 4
     assert "observation" in payload
     assert payload["step_number"] == 0
     assert payload["severity"] == "P2"
@@ -40,6 +43,7 @@ def test_reset_accepts_explicit_task_name():
     assert response.status_code == 200
 
     payload = response.json()
+    assert UUID(payload["session_id"]).version == 4
     assert "observation" in payload
     assert payload["step_number"] == 0
     assert payload["severity"] == "P1"
@@ -50,6 +54,7 @@ def test_reset_accepts_easy_alias_task_name():
     assert response.status_code == 200
 
     payload = response.json()
+    assert UUID(payload["session_id"]).version == 4
     assert "observation" in payload
     assert payload["step_number"] == 0
     assert payload["severity"] == "P2"
@@ -60,6 +65,7 @@ def test_reset_accepts_medium_alias_task_name():
     assert response.status_code == 200
 
     payload = response.json()
+    assert UUID(payload["session_id"]).version == 4
     assert "observation" in payload
     assert payload["step_number"] == 0
     assert payload["severity"] == "P2"
@@ -70,6 +76,7 @@ def test_reset_accepts_hard_alias_task_name():
     assert response.status_code == 200
 
     payload = response.json()
+    assert UUID(payload["session_id"]).version == 4
     assert "observation" in payload
     assert payload["step_number"] == 0
     assert payload["severity"] == "P1"

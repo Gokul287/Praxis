@@ -97,7 +97,14 @@ Investigate the root cause. Multiple services are affected -- follow the depende
         "cache": "degraded",
     }
 
-    INITIAL_AFFECTED_SERVICES = ["api", "auth", "payment", "database", "notification", "cache"]
+    INITIAL_AFFECTED_SERVICES = [
+        "api",
+        "auth",
+        "payment",
+        "database",
+        "notification",
+        "cache",
+    ]
 
     # ── Pre-computed investigation data ───────────────────────────────────────
     # IMPORTANT DESIGN NOTE: Log and metric data intentionally omit explicit
@@ -407,24 +414,34 @@ Common failure modes:
 
     # ── Accepted answers ───────────────────────────────────────────────────────
 
-    CORRECT_ROOT_CAUSES = frozenset({
-        "db_connection_pool_exhausted",
-        "database_connection_pool_exhausted",
-        "connection_pool_exhaustion",
-        "runaway_query",
-        "analytics_query",
-        "runaway_analytics_query",
-        "db_pool_exhausted",
-        "database_pool_exhausted",
-    })
+    CORRECT_ROOT_CAUSES = frozenset(
+        {
+            "db_connection_pool_exhausted",
+            "database_connection_pool_exhausted",
+            "connection_pool_exhaustion",
+            "runaway_query",
+            "analytics_query",
+            "runaway_analytics_query",
+            "db_pool_exhausted",
+            "database_pool_exhausted",
+        }
+    )
 
     # Red herring wrong answers the scenario anticipates
-    RED_HERRING_CAUSES = frozenset({
-        "api_deployment", "bad_deploy", "deploy_issue", "api_deploy",
-        "memory_pressure", "auth_memory",
-        "cache_failure", "cache_miss",
-        "notification_failure", "notification_deploy",
-    })
+    RED_HERRING_CAUSES = frozenset(
+        {
+            "api_deployment",
+            "bad_deploy",
+            "deploy_issue",
+            "api_deploy",
+            "memory_pressure",
+            "auth_memory",
+            "cache_failure",
+            "cache_miss",
+            "notification_failure",
+            "notification_deploy",
+        }
+    )
 
     # ── Per-episode state ──────────────────────────────────────────────────────
 
@@ -612,7 +629,9 @@ Common failure modes:
         if not duplicate:
             self._done_investigations.add(key)
 
-        score = self._score_event("investigation.check_runbook.default", duplicate=duplicate)
+        score = self._score_event(
+            "investigation.check_runbook.default", duplicate=duplicate
+        )
 
         return StepOutcome(
             investigation_result=data,
@@ -702,23 +721,36 @@ Common failure modes:
             )
 
         # Accept any query_id that suggests the runaway analytics query
-        analytics_ids = {"runaway_analytics", "8847", "analytics", "analytics_pipeline",
-                         "weekly_event_aggregation", "runaway", "8847pid"}
+        analytics_ids = {
+            "runaway_analytics",
+            "8847",
+            "analytics",
+            "analytics_pipeline",
+            "weekly_event_aggregation",
+            "runaway",
+            "8847pid",
+        }
         query_id_norm = query_id.replace("-", "_").replace(" ", "_")
 
-        if query_id_norm in analytics_ids or "analytic" in query_id_norm or "runway" in query_id_norm:
+        if (
+            query_id_norm in analytics_ids
+            or "analytic" in query_id_norm
+            or "runway" in query_id_norm
+        ):
             self._query_killed = True
             # Update system status partially
             if self._current_system_status.get("api") == "critical":
                 self._current_system_status["api"] = "degraded"
             if self._current_system_status.get("auth") == "critical":
                 self._current_system_status["auth"] = "degraded"
-                
+
             # If pool was already scaled AND query killed, resolve
             done_now = self._pool_scaled  # fully resolved only if both done
             if done_now:
                 self._incident_resolved = True
-                self._current_system_status = {k: "healthy" for k in self._current_system_status}
+                self._current_system_status = {
+                    k: "healthy" for k in self._current_system_status
+                }
 
             score = self._score_event(
                 "remediation.kill_query.database",
@@ -728,13 +760,13 @@ Common failure modes:
             return StepOutcome(
                 investigation_result=(
                     "Runaway query killed.\n\n"
-                    f"PID 8847 (analytics_pipeline) terminated.\n"
+                    "PID 8847 (analytics_pipeline) terminated.\n"
                     "- Database connection pool: 100/100 -> 0/100 (all connections freed)\n"
                     "- Services are recovering\n\n"
                     + (
                         "Incident fully resolved. Services recovering to healthy state."
-                        if done_now else
-                        "Services are partially recovering (Critical -> Degraded). Consider scaling the connection pool to prevent recurrence."
+                        if done_now
+                        else "Services are partially recovering (Critical -> Degraded). Consider scaling the connection pool to prevent recurrence."
                     )
                 ),
                 reward=score.reward,
@@ -760,12 +792,19 @@ Common failure modes:
         service = get_service_param(command.params, default="database")
         resource = command.params.get("resource", "").lower().strip()
 
-        if service == "database" and resource in ("connection_pool", "connections", "pool", "db_connections"):
+        if service == "database" and resource in (
+            "connection_pool",
+            "connections",
+            "pool",
+            "db_connections",
+        ):
             self._pool_scaled = True
             done_now = self._query_killed  # only resolve if both done
             if done_now:
                 self._incident_resolved = True
-                self._current_system_status = {k: "healthy" for k in self._current_system_status}
+                self._current_system_status = {
+                    k: "healthy" for k in self._current_system_status
+                }
 
             score = self._score_event(
                 "remediation.scale_resource.database.connection_pool",
@@ -780,8 +819,8 @@ Common failure modes:
                     "- Production services guaranteed minimum 150 connections\n\n"
                     + (
                         "Incident fully resolved. All services recovered to healthy state."
-                        if done_now else
-                        "Pool scaled. The runaway query is still holding connections."
+                        if done_now
+                        else "Pool scaled. The runaway query is still holding connections."
                     )
                 ),
                 reward=score.reward,
@@ -828,9 +867,7 @@ Common failure modes:
                 "But notification errors persist along with other services."
             )
         else:
-            message = (
-                f"Rolled back '{service}' but the incident continues."
-            )
+            message = f"Rolled back '{service}' but the incident continues."
         score = self._score_event("remediation.wrong", destructive=True)
         return StepOutcome(
             investigation_result=message,

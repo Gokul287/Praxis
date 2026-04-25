@@ -1,5 +1,7 @@
 # Session Lifecycle — From `/reset` to Termination
 
+> Status: shipped in Issue #1 (`SessionManager` + required `X-Session-Id` on `/step` and `/state`).
+>
 > The temporal contract every endpoint, scenario, and test agrees on.
 > Cross-references [`ConcurrencyModel.md`](./ConcurrencyModel.md),
 > [`MemoryModel.md`](./MemoryModel.md), and [`APIContract.md`](./APIContract.md).

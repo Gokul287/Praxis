@@ -178,7 +178,9 @@ QUALITY_CASES = [
 
 
 @pytest.mark.parametrize(("scenario_cls", "optimal", "naive", "min_gap"), QUALITY_CASES)
-def test_better_path_scores_higher_than_naive_path(scenario_cls, optimal, naive, min_gap):
+def test_better_path_scores_higher_than_naive_path(
+    scenario_cls, optimal, naive, min_gap
+):
     optimal_total = sum(run_scenario_path(scenario_cls, optimal))
     naive_total = sum(run_scenario_path(scenario_cls, naive))
     assert optimal_total > naive_total

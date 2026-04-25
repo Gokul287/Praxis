@@ -9,7 +9,6 @@ Three mandatory patterns for every scenario:
 Plus: full lifecycle via HTTP (reset → step → step → done).
 """
 
-import json
 import pytest
 from server.command_parser import parse_command
 from praxis_env.scenarios.single_service_alert import SingleServiceAlertScenario
@@ -27,6 +26,7 @@ def step_cmd(scenario: SingleServiceAlertScenario, cmd_str: str):
 
 
 # ── 1. Optimal path ───────────────────────────────────────────────────────────
+
 
 class TestOptimalPath:
     """
@@ -50,8 +50,9 @@ class TestOptimalPath:
         s = make_scenario()
         for cmd, expected in zip(self.OPTIMAL_COMMANDS, self.EXPECTED_REWARDS):
             outcome = step_cmd(s, cmd)
-            assert outcome.reward == pytest.approx(expected, abs=1e-6), \
+            assert outcome.reward == pytest.approx(expected, abs=1e-6), (
                 f"cmd={cmd!r} expected={expected} got={outcome.reward}"
+            )
 
     def test_optimal_path_done_at_end(self):
         s = make_scenario()
@@ -82,14 +83,12 @@ class TestOptimalPath:
 
     def test_total_optimal_score(self):
         s = make_scenario()
-        total = sum(
-            step_cmd(s, cmd).reward
-            for cmd in self.OPTIMAL_COMMANDS
-        )
+        total = sum(step_cmd(s, cmd).reward for cmd in self.OPTIMAL_COMMANDS)
         assert total == pytest.approx(0.63, abs=1e-6)
 
 
 # ── 2. Determinism ────────────────────────────────────────────────────────────
+
 
 class TestDeterminism:
     """Same actions must produce identical rewards across 3 fresh episodes."""
@@ -127,6 +126,7 @@ class TestDeterminism:
 
 # ── 3. Reward bounds ──────────────────────────────────────────────────────────
 
+
 class TestRewardBounds:
     """Every command must return reward in [0.01, 0.99]. Never raises."""
 
@@ -147,31 +147,32 @@ class TestRewardBounds:
         "check_deps service=database",
         "check_config service=auth",
         "check_config service=api",
-        "diagnose root_cause=bad_config",              # correct
-        "diagnose root_cause=config_typo",             # correct variant
-        "diagnose root_cause=wrong_answer",            # incorrect
-        "diagnose root_cause=database_overload",       # incorrect
-        "diagnose root_cause=",                        # empty
+        "diagnose root_cause=bad_config",  # correct
+        "diagnose root_cause=config_typo",  # correct variant
+        "diagnose root_cause=wrong_answer",  # incorrect
+        "diagnose root_cause=database_overload",  # incorrect
+        "diagnose root_cause=",  # empty
         "restart_service service=auth",
         "restart_service service=api",
-        "rollback_deploy service=auth",                # correct
-        "rollback_deploy service=api",                 # wrong service
+        "rollback_deploy service=auth",  # correct
+        "rollback_deploy service=api",  # wrong service
         "scale_resource service=auth resource=replicas",
         "kill_query service=database query_id=q123",
         "escalate reason=too complex",
         "escalate reason=",
         "escalate",
-        "",                                            # empty command
-        "gibberish xyz abc",                           # unknown
-        "QUERY_LOGS service=auth timerange=5m",        # uppercase
+        "",  # empty command
+        "gibberish xyz abc",  # unknown
+        "QUERY_LOGS service=auth timerange=5m",  # uppercase
     ]
 
     @pytest.mark.parametrize("cmd", ALL_COMMANDS)
     def test_reward_in_bounds(self, cmd):
         s = make_scenario()
         outcome = step_cmd(s, cmd)
-        assert 0.01 <= outcome.reward <= 0.99, \
+        assert 0.01 <= outcome.reward <= 0.99, (
             f"Reward {outcome.reward} out of bounds for: {cmd!r}"
+        )
 
     @pytest.mark.parametrize("cmd", ALL_COMMANDS)
     def test_never_raises(self, cmd):
@@ -185,13 +186,16 @@ class TestRewardBounds:
 
 # ── 4. Scenario registration ──────────────────────────────────────────────────
 
+
 class TestRegistration:
     def test_task_is_registered(self):
         from praxis_env.scenarios import list_tasks
+
         assert "single-service-alert" in list_tasks()
 
     def test_get_scenario_returns_correct_type(self):
         from praxis_env.scenarios import get_scenario
+
         s = get_scenario("single-service-alert")
         assert isinstance(s, SingleServiceAlertScenario)
 
@@ -204,13 +208,16 @@ class TestRegistration:
 
 # ── 5. Evidence and escalation logic ─────────────────────────────────────────
 
+
 class TestEscalationLogic:
     def test_escalate_with_enough_evidence(self):
         s = make_scenario()
         step_cmd(s, "query_logs service=auth timerange=5m")
         step_cmd(s, "check_config service=auth")
         step_cmd(s, "check_metrics service=auth metric=error_rate")
-        outcome = step_cmd(s, "escalate reason=config typo in db hostname at 14:23 deploy")
+        outcome = step_cmd(
+            s, "escalate reason=config typo in db hostname at 14:23 deploy"
+        )
         assert outcome.reward == pytest.approx(0.15)
         assert outcome.done is True
 

@@ -69,9 +69,9 @@ flowchart LR
 
 ---
 
-## 4. FastAPI integration sketch
+## 4. FastAPI integration (shipped)
 
-`server/app.py` swaps the module-level singleton for a manager. Pseudocode (final form lives in Issue #1):
+`server/app.py` now swaps the module-level singleton for `SessionManager`, and `server/session_manager.py` provides allocation, lookup, touch, and close with lock-guarded mutations.
 
 ```python
 from threading import Lock

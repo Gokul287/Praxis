@@ -36,10 +36,7 @@ def get_scenario(task_name: str) -> BaseScenario:
     """
     if task_name not in SCENARIO_REGISTRY:
         available = ", ".join(sorted(SCENARIO_REGISTRY.keys()))
-        raise ValueError(
-            f"Unknown task: '{task_name}'. "
-            f"Available tasks: [{available}]"
-        )
+        raise ValueError(f"Unknown task: '{task_name}'. Available tasks: [{available}]")
     return SCENARIO_REGISTRY[task_name]()
 
 

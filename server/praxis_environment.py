@@ -65,6 +65,10 @@ class PraxisEnvironment:
         state = env.state()
     """
 
+    # mirrors openenv.core.env_server.interfaces.Environment.SUPPORTS_CONCURRENT_SESSIONS (S14)
+    SUPPORTS_CONCURRENT_SESSIONS: bool = True
+    REQUIRES_SINGLE_THREAD_EXECUTOR: bool = False
+
     def __init__(self) -> None:
         self._scenario: BaseScenario | None = None
         self._episode_count: int = 0
@@ -79,12 +83,17 @@ class PraxisEnvironment:
 
     # ── Public API (called by FastAPI routes) ─────────────────────────────────
 
-    def reset(self, task_name: str = "single-service-alert") -> PraxisObservation:
+    def reset(
+        self,
+        task_name: str = "single-service-alert",
+        seed: int | None = None,
+    ) -> PraxisObservation:
         """
         Start a new episode with the named scenario.
 
         Args:
             task_name: Scenario to load (see list_tasks() for options).
+            seed: Optional deterministic seed for procedural scenarios.
 
         Returns:
             Initial PraxisObservation with the incident alert and system status.
@@ -98,10 +107,11 @@ class PraxisEnvironment:
         episode_id = f"{canonical_task_name}_{self._episode_count}"
 
         logger.info(
-            "reset() -> episode_id=%s task=%s requested_task=%s",
+            "reset() -> episode_id=%s task=%s requested_task=%s seed=%s",
             episode_id,
             canonical_task_name,
             task_name,
+            seed,
         )
 
         self._scenario = get_scenario(canonical_task_name)

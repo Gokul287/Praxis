@@ -71,7 +71,9 @@ class TestEvidenceRules:
         scenario = make_scenario()
         step_cmd(scenario, "query_logs service=frontend timerange=10m")
         step_cmd(scenario, "query_logs service=api timerange=10m")
-        step_cmd(scenario, "check_metrics service=dns-resolver metric=resolution_failures")
+        step_cmd(
+            scenario, "check_metrics service=dns-resolver metric=resolution_failures"
+        )
         outcome = step_cmd(scenario, "diagnose root_cause=dns_misconfiguration")
         assert outcome.reward == pytest.approx(0.01)
         assert outcome.root_cause_identified is False
@@ -88,8 +90,12 @@ class TestEvidenceRules:
         step_cmd(scenario, "query_logs service=frontend timerange=10m")
         step_cmd(scenario, "query_logs service=api timerange=10m")
         step_cmd(scenario, "query_logs service=auth timerange=10m")
-        step_cmd(scenario, "check_metrics service=dns-resolver metric=resolution_failures")
-        outcome = step_cmd(scenario, "escalate reason=dns failures across frontend api and auth")
+        step_cmd(
+            scenario, "check_metrics service=dns-resolver metric=resolution_failures"
+        )
+        outcome = step_cmd(
+            scenario, "escalate reason=dns failures across frontend api and auth"
+        )
         assert outcome.reward == pytest.approx(0.137)
         assert outcome.done is True
         assert outcome.incident_resolved is True

@@ -11,7 +11,7 @@ in Phases 3-5.
 
 import pytest
 from server.praxis_environment import PraxisEnvironment
-from praxis_env.models import PraxisAction, PraxisState
+from praxis_env.models import PraxisAction
 
 
 class TestPraxisEnvironmentInit:
@@ -80,18 +80,21 @@ class TestCommandParserIntegration:
     def test_parse_command_standalone(self):
         """Direct smoke test of parse_command from the server module."""
         from server.command_parser import parse_command
+
         cmd = parse_command("query_logs service=auth timerange=5m")
         assert cmd.action_type == "query_logs"
         assert cmd.params == {"service": "auth", "timerange": "5m"}
 
     def test_parse_empty_command(self):
         from server.command_parser import parse_command
+
         cmd = parse_command("")
         assert cmd.action_type == ""
         assert cmd.params == {}
 
     def test_parse_escalate_freetext(self):
         from server.command_parser import parse_command
+
         cmd = parse_command("escalate reason=everything is on fire please help")
         assert cmd.action_type == "escalate"
         assert cmd.params["reason"] == "everything is on fire please help"
@@ -103,6 +106,7 @@ class TestObsToDict:
     def test_obs_to_dict_has_all_keys(self):
         from server.praxis_environment import PraxisEnvironment
         from praxis_env.models import PraxisObservation
+
         env = PraxisEnvironment()
         obs = PraxisObservation(
             alert_summary="test alert",
@@ -116,9 +120,14 @@ class TestObsToDict:
         )
         d = env._obs_to_dict(obs)
         required_keys = {
-            "alert_summary", "system_status", "investigation_result",
-            "available_commands", "time_elapsed_minutes",
-            "severity", "services_affected", "step_number",
+            "alert_summary",
+            "system_status",
+            "investigation_result",
+            "available_commands",
+            "time_elapsed_minutes",
+            "severity",
+            "services_affected",
+            "step_number",
         }
         assert required_keys == set(d.keys())
 
@@ -126,6 +135,7 @@ class TestObsToDict:
         import json
         from server.praxis_environment import PraxisEnvironment
         from praxis_env.models import PraxisObservation
+
         env = PraxisEnvironment()
         obs = PraxisObservation(
             alert_summary="test",
@@ -389,7 +399,9 @@ class TestEpisodeScoreBudget:
         assert last_result["info"].get("score_cap_reached") is True
         assert env.state().cumulative_reward == pytest.approx(0.99)
 
-        repeated = env.step(PraxisAction(command="query_logs service=auth timerange=5m"))
+        repeated = env.step(
+            PraxisAction(command="query_logs service=auth timerange=5m")
+        )
 
         assert repeated["reward"] == pytest.approx(0.01)
         assert repeated["done"] is True

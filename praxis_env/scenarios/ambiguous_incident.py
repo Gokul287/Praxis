@@ -91,19 +91,23 @@ Investigate the shared failure pattern and resolve the incident.\
     APP_SERVICES = frozenset({"frontend", "api", "auth", "search"})
     INFRA_SERVICES = frozenset({"dns-resolver", "load-balancer"})
 
-    CORRECT_ROOT_CAUSES = frozenset({
-        "dns_misconfiguration",
-        "dns_failure",
-        "dns_resolver_corrupted",
-        "dns_resolver_misconfigured",
-    })
+    CORRECT_ROOT_CAUSES = frozenset(
+        {
+            "dns_misconfiguration",
+            "dns_failure",
+            "dns_resolver_corrupted",
+            "dns_resolver_misconfigured",
+        }
+    )
 
-    RED_HERRING_CAUSES = frozenset({
-        "api_deployment",
-        "network_latency",
-        "search_bug",
-        "auth_memory",
-    })
+    RED_HERRING_CAUSES = frozenset(
+        {
+            "api_deployment",
+            "network_latency",
+            "search_bug",
+            "auth_memory",
+        }
+    )
 
     _LOGS = {
         "frontend": """\
@@ -346,7 +350,12 @@ Triage steps:
         return len(self._app_services_seen) >= 3 and len(self._infra_services_seen) >= 1
 
     def _remember_service(self, service: str) -> None:
-        if service in self._LOGS or service in self._METRICS or service in self._DEPS or service in self._CONFIGS:
+        if (
+            service in self._LOGS
+            or service in self._METRICS
+            or service in self._DEPS
+            or service in self._CONFIGS
+        ):
             self._unique_services.add(service)
             if service in self.APP_SERVICES:
                 self._app_services_seen.add(service)
@@ -451,7 +460,9 @@ Triage steps:
             self._done_investigations.add(key)
             self._remember_service(service)
 
-        score = self._score_event("investigation.check_deps.default", duplicate=duplicate)
+        score = self._score_event(
+            "investigation.check_deps.default", duplicate=duplicate
+        )
 
         return StepOutcome(
             investigation_result=data,
@@ -518,7 +529,9 @@ Triage steps:
             self._done_investigations.add(key)
             self._remember_service(service)
 
-        score = self._score_event("investigation.check_runbook.default", duplicate=duplicate)
+        score = self._score_event(
+            "investigation.check_runbook.default", duplicate=duplicate
+        )
 
         return StepOutcome(
             investigation_result=data,
@@ -579,9 +592,7 @@ Triage steps:
                     " shared NXDOMAIN pattern across frontend, api, and auth."
                 )
             else:
-                detail = (
-                    "Incorrect diagnosis: network latency is a symptom of retries, not the root cause."
-                )
+                detail = "Incorrect diagnosis: network latency is a symptom of retries, not the root cause."
 
             score = self._score_event("diagnosis.wrong", premature=True)
             return StepOutcome(
@@ -631,8 +642,12 @@ Triage steps:
             )
 
         self._incident_resolved = True
-        self._current_system_status = {service_name: "healthy" for service_name in self._current_system_status}
-        score = self._score_event("remediation.restart_service.dns-resolver", resolved=True)
+        self._current_system_status = {
+            service_name: "healthy" for service_name in self._current_system_status
+        }
+        score = self._score_event(
+            "remediation.restart_service.dns-resolver", resolved=True
+        )
         return StepOutcome(
             investigation_result=(
                 "dns-resolver restarted successfully.\n\n"
@@ -665,7 +680,9 @@ Triage steps:
             )
 
         self._incident_resolved = True
-        self._current_system_status = {service_name: "healthy" for service_name in self._current_system_status}
+        self._current_system_status = {
+            service_name: "healthy" for service_name in self._current_system_status
+        }
         score = self._score_event("escalation.with_evidence", resolved=True)
         return StepOutcome(
             investigation_result=(

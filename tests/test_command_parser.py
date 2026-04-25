@@ -5,7 +5,6 @@ Tests every command type including edge cases (empty, unknown,
 escalate free text, mixed quoting).
 """
 
-import pytest
 from server.command_parser import is_known_action, parse_command
 from praxis_env.scenarios.base import (
     get_metric_param,
@@ -133,9 +132,16 @@ class TestParseCommand:
 class TestIsKnownAction:
     def test_known_actions(self):
         known = [
-            "query_logs", "check_metrics", "check_deps", "check_config",
-            "diagnose", "restart_service", "rollback_deploy",
-            "scale_resource", "kill_query", "escalate",
+            "query_logs",
+            "check_metrics",
+            "check_deps",
+            "check_config",
+            "diagnose",
+            "restart_service",
+            "rollback_deploy",
+            "scale_resource",
+            "kill_query",
+            "escalate",
         ]
         for action in known:
             assert is_known_action(action), f"{action} should be known"
@@ -169,7 +175,7 @@ class TestParamHelpers:
         assert get_timerange_minutes({"timerange": "30m"}) == 30
 
     def test_get_timerange_minutes_missing(self):
-        assert get_timerange_minutes({}) == 5       # default
+        assert get_timerange_minutes({}) == 5  # default
         assert get_timerange_minutes({}, default=10) == 10
 
     def test_get_timerange_minutes_bad_value(self):

@@ -113,19 +113,19 @@ DEFAULT_REWARD_POLICIES: dict[str, RewardPolicy] = {
     "single-service-alert": RewardPolicy(
         event_values={
             # Investigation — generous for the easy task
-            "investigation.query_logs.auth": 0.08,        # key service
-            "investigation.query_logs.default": 0.05,      # exploring is okay
+            "investigation.query_logs.auth": 0.08,  # key service
+            "investigation.query_logs.default": 0.05,  # exploring is okay
             "investigation.check_metrics.connections": 0.08,
             "investigation.check_metrics.default": 0.05,
             "investigation.check_deps.default": 0.05,
-            "investigation.check_config.auth": 0.10,       # high-value: reveals the config typo
+            "investigation.check_config.auth": 0.10,  # high-value: reveals the config typo
             "investigation.check_config.default": 0.03,
-            "investigation.check_runbook.default": 0.05,   # consulting runbook is rewarded
+            "investigation.check_runbook.default": 0.05,  # consulting runbook is rewarded
             # Diagnosis
             "diagnosis.correct": 0.20,
             "diagnosis.wrong": 0.0,
             # Remediation
-            "remediation.rollback_deploy.auth": 0.25,      # correct fix = highest single reward
+            "remediation.rollback_deploy.auth": 0.25,  # correct fix = highest single reward
             "remediation.wrong": 0.0,
             # Escalation
             "escalation.with_evidence": 0.15,
@@ -144,13 +144,13 @@ DEFAULT_REWARD_POLICIES: dict[str, RewardPolicy] = {
     "cascading-failure": RewardPolicy(
         event_values={
             # Investigation — lower rewards, must multi-hop to find root cause
-            "investigation.query_logs.api": 0.03,          # symptom service, low value
-            "investigation.query_logs.database": 0.05,     # closer to root cause
-            "investigation.query_logs.analytics": 0.05,    # reveals the runaway query
-            "investigation.query_logs.default": 0.02,      # exploring other services
+            "investigation.query_logs.api": 0.03,  # symptom service, low value
+            "investigation.query_logs.database": 0.05,  # closer to root cause
+            "investigation.query_logs.analytics": 0.05,  # reveals the runaway query
+            "investigation.query_logs.default": 0.02,  # exploring other services
             "investigation.check_metrics.database.connections": 0.08,  # key metric
             "investigation.check_metrics.default": 0.02,
-            "investigation.check_deps.core": 0.03,         # reveals db dependency
+            "investigation.check_deps.core": 0.03,  # reveals db dependency
             "investigation.check_deps.default": 0.02,
             "investigation.check_config.database": 0.03,
             "investigation.check_config.analytics": 0.03,
@@ -160,7 +160,7 @@ DEFAULT_REWARD_POLICIES: dict[str, RewardPolicy] = {
             "diagnosis.correct": 0.14,
             "diagnosis.wrong": 0.0,
             # Remediation — both needed for full resolution
-            "remediation.kill_query.database": 0.09,       # stop the bleeding
+            "remediation.kill_query.database": 0.09,  # stop the bleeding
             "remediation.scale_resource.database.connection_pool": 0.08,  # prevent recurrence
             "remediation.wrong": 0.0,
             # Escalation
