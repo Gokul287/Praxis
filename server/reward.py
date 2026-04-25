@@ -263,6 +263,45 @@ DEFAULT_REWARD_POLICIES: dict[str, RewardPolicy] = {
         ),
         time_pressure_cost_per_step=0.005,
     ),
+    # ── HARD+: cascading-platform-failure (mega incident) ─────────────────
+    # Target optimal path: >=0.55 while requiring multiple correlated
+    # investigations, three diagnoses, and three remediations.
+    "cascading-platform-failure": RewardPolicy(
+        event_values=_with_memory_events(
+            {
+                # Investigation
+                "investigation.query_logs.database": 0.055,
+                "investigation.query_logs.cdn": 0.055,
+                "investigation.query_logs.worker": 0.055,
+                "investigation.query_logs.default": 0.02,
+                "investigation.check_metrics.database.connections": 0.07,
+                "investigation.check_metrics.cdn.tls_handshake_failures": 0.07,
+                "investigation.check_metrics.worker.memory": 0.07,
+                "investigation.check_metrics.default": 0.02,
+                "investigation.check_deps.default": 0.02,
+                "investigation.check_config.database": 0.04,
+                "investigation.check_config.cdn": 0.04,
+                "investigation.check_config.worker": 0.04,
+                "investigation.check_config.default": 0.02,
+                "investigation.check_runbook.default": 0.025,
+                # Diagnosis
+                "diagnosis.correct": 0.08,
+                "diagnosis.wrong": 0.0,
+                # Remediation
+                "remediation.scale_resource.database.connection_pool": 0.10,
+                "remediation.rollback_deploy.cdn": 0.10,
+                "remediation.rollback_deploy.worker": 0.10,
+                "remediation.wrong": 0.0,
+                # Escalation
+                "escalation.with_evidence": 0.12,
+                "escalation.no_evidence": 0.0,
+                # Error handling
+                "unknown_command": 0.0,
+                "invalid_input": 0.0,
+            }
+        ),
+        time_pressure_cost_per_step=0.004,
+    ),
 }
 
 
