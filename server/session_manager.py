@@ -39,6 +39,7 @@ class SessionAllocation:
 
     session: Session
     observation: PraxisObservation
+    metadata: dict[str, int | str | None] = field(default_factory=dict)
 
 
 class SessionManager:
@@ -80,7 +81,11 @@ class SessionManager:
                     evicted_session.task_name,
                 )
             self._sessions[session_id] = session
-        return SessionAllocation(session=session, observation=observation)
+        return SessionAllocation(
+            session=session,
+            observation=observation,
+            metadata=env.last_reset_metadata,
+        )
 
     def get(self, session_id: str) -> Session | None:
         """Return session by id without mutating LRU order."""

@@ -144,7 +144,7 @@ Sparse milestone rewards by design. See [`ScenarioCatalog.md`](./ScenarioCatalog
 
 ---
 
-## 4. NEW `procedural-incident` (seeded)
+## 4. `procedural-incident` (seeded, shipped in Issue #8)
 
 Reward map is **built at scenario init** by `_build_procedural_policy(difficulty)`. Skeleton:
 

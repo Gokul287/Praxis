@@ -311,6 +311,10 @@ class RewardEngine:
     def __init__(self, policies: Mapping[str, RewardPolicy] | None = None) -> None:
         self._policies = dict(policies or DEFAULT_REWARD_POLICIES)
 
+    def register_policy(self, task_name: str, policy: RewardPolicy) -> None:
+        """Register or replace a task-level reward policy at runtime."""
+        self._policies[task_name] = policy
+
     def score(
         self,
         *,

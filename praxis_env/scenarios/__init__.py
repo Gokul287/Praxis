@@ -12,6 +12,7 @@ from praxis_env.scenarios.cascading_failure import CascadingFailureScenario
 from praxis_env.scenarios.ambiguous_incident import AmbiguousIncidentScenario
 from praxis_env.scenarios.memory_leak_scenario import MemoryLeakScenario
 from praxis_env.scenarios.mega_incident import MegaIncidentScenario
+from praxis_env.scenarios.procedural_incident import ProceduralIncidentScenario
 
 # Populated as phases complete. Add new scenarios here.
 SCENARIO_REGISTRY: dict[str, type[BaseScenario]] = {
@@ -20,10 +21,16 @@ SCENARIO_REGISTRY: dict[str, type[BaseScenario]] = {
     "ambiguous-incident": AmbiguousIncidentScenario,
     "memory-leak": MemoryLeakScenario,
     "cascading-platform-failure": MegaIncidentScenario,
+    "procedural-incident": ProceduralIncidentScenario,
 }
 
 
-def get_scenario(task_name: str) -> BaseScenario:
+def get_scenario(
+    task_name: str,
+    *,
+    seed: int | None = None,
+    difficulty: str | None = None,
+) -> BaseScenario:
     """
     Instantiate a registered scenario by task name.
 
@@ -39,6 +46,10 @@ def get_scenario(task_name: str) -> BaseScenario:
     if task_name not in SCENARIO_REGISTRY:
         available = ", ".join(sorted(SCENARIO_REGISTRY.keys()))
         raise ValueError(f"Unknown task: '{task_name}'. Available tasks: [{available}]")
+    if task_name == "procedural-incident":
+        return SCENARIO_REGISTRY[task_name](
+            seed=seed, difficulty=difficulty or "medium"
+        )
     return SCENARIO_REGISTRY[task_name]()
 
 

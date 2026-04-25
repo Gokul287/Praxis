@@ -192,6 +192,16 @@ Trade-off accepted: small duplication with `/metadata` (which lists tasks) and `
 
 ---
 
+## ADR-15 — Procedural generator shipped with diagnosis gate (NEW)
+
+**Date**: 2026-04-25 · **Status**: Accepted · **Issue**: #8 · **Source**: ADR-07, ADR-13, `tests/test_task6_procedural.py`.
+
+Issue #8 ships the `procedural-incident` scenario from ADR-07 as a seeded deterministic generator with difficulty tiers (`easy`/`medium`/`hard`) and runtime-stamped `MAX_STEPS` + `MEMORY_CUTOFF_OVERRIDE`.
+
+Cross-link to ADR-13: the new scenario enforces a hard evidence gate where remediation attempts before diagnosis score zero (clamped at the shared floor in emitted rewards), with explicit tests across all three procedural difficulties.
+
+---
+
 ## How to add a new ADR
 
 1. Append at the bottom with the next number.
