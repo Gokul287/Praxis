@@ -59,10 +59,10 @@ class SessionManager:
         `seed` is accepted for API compatibility; deterministic scenarios may
         ignore it until procedural tasks are introduced.
         """
-        env = PraxisEnvironment()
-        observation = env.reset(task_name=task_name, seed=seed)
-        now = time.time()
         session_id = str(uuid4())
+        env = PraxisEnvironment()
+        observation = env.reset(task_name=task_name, seed=seed, session_id=session_id)
+        now = time.time()
         session = Session(
             session_id=session_id,
             env=env,
