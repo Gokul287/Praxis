@@ -256,8 +256,7 @@ class PraxisEnvironment:
         # at cap so the resolution logic can still fire.
         _flow_actions = PLANNING_ACTION_TYPES | {"escalate"}
         if (
-            self._scenario.clamp_reward(self._scenario._cumulative_reward)
-            >= MAX_REWARD
+            self._scenario.clamp_reward(self._scenario._cumulative_reward) >= MAX_REWARD
             and parsed.action_type not in _flow_actions
         ):
             obs = self._scenario.get_observation()
@@ -355,9 +354,7 @@ class PraxisEnvironment:
         if score_cap_reached:
             info["score_cap_reached"] = True
 
-        episode_done = (
-            outcome.done or self._scenario.is_done() or score_cap_reached
-        )
+        episode_done = outcome.done or self._scenario.is_done() or score_cap_reached
 
         if self._trajectory is not None:
             self._trajectory.append(
@@ -369,9 +366,7 @@ class PraxisEnvironment:
                     reward=float(step_reward),
                     done=bool(episode_done),
                     incident_resolved=bool(self._scenario._incident_resolved),
-                    root_cause_identified=bool(
-                        self._scenario._root_cause_identified
-                    ),
+                    root_cause_identified=bool(self._scenario._root_cause_identified),
                 )
             )
             info["breakdown"] = self._reward_engine.score_trajectory(
@@ -463,9 +458,7 @@ class PraxisEnvironment:
         obs.mission_id = getattr(self._scenario, "mission_id", None)
         obs.phase = getattr(self._scenario, "current_phase", None)
         scenario_budget = getattr(self._scenario, "time_budget", None)
-        obs.time_budget = (
-            int(scenario_budget) if scenario_budget is not None else None
-        )
+        obs.time_budget = int(scenario_budget) if scenario_budget is not None else None
         obs.pending_objectives = list(self._mission_plan.pending_objectives)
 
     def _score_memory_event(self, event: str) -> float:
@@ -526,9 +519,7 @@ class PraxisEnvironment:
         # Defensive guard — PLANNING_ACTION_TYPES is the source of truth.
         raise ValueError(f"Unhandled planning action: {action_type!r}")
 
-    def _handle_create_plan(
-        self, params: dict[str, str]
-    ) -> tuple[StepOutcome, str]:
+    def _handle_create_plan(self, params: dict[str, str]) -> tuple[StepOutcome, str]:
         assert self._scenario is not None
         raw_milestones = params.get("milestones", "")
         milestones = [m.strip() for m in raw_milestones.split(",") if m.strip()]
@@ -569,16 +560,12 @@ class PraxisEnvironment:
         )
         return outcome, event
 
-    def _handle_revise_plan(
-        self, params: dict[str, str]
-    ) -> tuple[StepOutcome, str]:
+    def _handle_revise_plan(self, params: dict[str, str]) -> tuple[StepOutcome, str]:
         assert self._scenario is not None
         had_evidence = self._has_investigation_evidence()
         if not self._mission_plan.milestones:
             event = "plan.revise_no_op"
-            result_text = (
-                "No plan to revise. Use create_plan first."
-            )
+            result_text = "No plan to revise. Use create_plan first."
         else:
             applied = self._mission_plan.revise(
                 replace=params.get("replace"),
@@ -618,9 +605,7 @@ class PraxisEnvironment:
         )
         return outcome, event
 
-    def _handle_checkpoint(
-        self, params: dict[str, str]
-    ) -> tuple[StepOutcome, str]:
+    def _handle_checkpoint(self, params: dict[str, str]) -> tuple[StepOutcome, str]:
         assert self._scenario is not None
         milestone = (params.get("milestone") or "").strip()
         world_state = self._mission_world_state()
@@ -632,8 +617,7 @@ class PraxisEnvironment:
             event = "checkpoint.invalid"
             if not milestone:
                 result_text = (
-                    "Invalid checkpoint command.\n"
-                    "Expected: checkpoint milestone=<name>"
+                    "Invalid checkpoint command.\nExpected: checkpoint milestone=<name>"
                 )
             elif milestone not in self._mission_plan.milestones:
                 result_text = (
@@ -655,14 +639,10 @@ class PraxisEnvironment:
         )
         return outcome, event
 
-    def _handle_submit_report(
-        self, params: dict[str, str]
-    ) -> tuple[StepOutcome, str]:
+    def _handle_submit_report(self, params: dict[str, str]) -> tuple[StepOutcome, str]:
         assert self._scenario is not None
         raw_root_causes = params.get("root_causes", "")
-        report_causes = [
-            c.strip() for c in raw_root_causes.split(",") if c.strip()
-        ]
+        report_causes = [c.strip() for c in raw_root_causes.split(",") if c.strip()]
         resolution = (params.get("resolution") or "").strip()
         if not report_causes:
             event = "submit_report.inconsistent_with_world_state"
@@ -672,15 +652,11 @@ class PraxisEnvironment:
             )
         elif self._submit_report_consistent(report_causes, resolution):
             event = "submit_report.consistent_with_world_state"
-            result_text = (
-                "Report accepted. Root causes: "
-                f"{', '.join(report_causes)}"
-            )
+            result_text = f"Report accepted. Root causes: {', '.join(report_causes)}"
         elif not self._scenario._root_cause_identified:
             event = "submit_report.no_diagnosis"
             result_text = (
-                "Report rejected: root cause has not yet been "
-                "confirmed via diagnose."
+                "Report rejected: root cause has not yet been confirmed via diagnose."
             )
         else:
             event = "submit_report.inconsistent_with_world_state"
@@ -803,9 +779,7 @@ class PraxisEnvironment:
         pending = self._mission_plan.pending_objectives
         if pending:
             return f"Next pending milestone: {pending[0]}"
-        return (
-            "No pending objectives. Run create_plan or finish remediation."
-        )
+        return "No pending objectives. Run create_plan or finish remediation."
 
     def _handle_memory_action(
         self,

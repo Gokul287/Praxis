@@ -72,9 +72,7 @@ class TestLayout:
 
     def test_required_subdirs_present(self) -> None:
         for sub in ("logs", "runbooks", "tickets", "notes"):
-            assert (ARTIFACTS_ROOT / sub).is_dir(), (
-                f"data/artifacts/{sub}/ must exist"
-            )
+            assert (ARTIFACTS_ROOT / sub).is_dir(), f"data/artifacts/{sub}/ must exist"
 
     def test_notice_and_readme_present(self) -> None:
         assert (ARTIFACTS_ROOT / "NOTICE.md").is_file()
@@ -148,9 +146,7 @@ class TestArtifactStore:
             assert artifacts, f"expected note for service '{svc}'"
             assert artifacts[0].kind == "note"
 
-    def test_unknown_service_returns_empty_list(
-        self, store: ArtifactStore
-    ) -> None:
+    def test_unknown_service_returns_empty_list(self, store: ArtifactStore) -> None:
         assert store.draw("log", "made-up-service", n=2) == []
 
     def test_unknown_kind_raises(self, store: ArtifactStore) -> None:
@@ -190,9 +186,7 @@ class TestDeterminism:
             if a != b:
                 diverged = True
                 break
-        assert diverged, (
-            "expected at least one (kind, service) to diverge across seeds"
-        )
+        assert diverged, "expected at least one (kind, service) to diverge across seeds"
 
     def test_repeated_calls_same_seed_same_call_match(self) -> None:
         s = ArtifactStore(ARTIFACTS_ROOT, seed=11)
@@ -222,9 +216,7 @@ class TestProvenance:
         assert "runbooks/" in rb.source
         assert "#L" not in rb.source  # whole-file artifacts have no line range
 
-    def test_attribution_string_is_self_describing(
-        self, store: ArtifactStore
-    ) -> None:
+    def test_attribution_string_is_self_describing(self, store: ArtifactStore) -> None:
         attribution = store.attribution()
         assert ArtifactStore.PROVENANCE_PREFIX in attribution
         assert "services=" in attribution
@@ -264,9 +256,7 @@ class TestMissionScenarioIntegration:
         from praxis_env.models import PraxisAction
 
         env = self._new_env()
-        out = env.step(
-            PraxisAction(command="check_runbook service=worker kind=ticket")
-        )
+        out = env.step(PraxisAction(command="check_runbook service=worker kind=ticket"))
         text = out["observation"]["investigation_result"]
         assert "[PRIOR TICKET EXCERPT: worker]" in text
         assert "Source: praxis:fixtures/tickets/worker" in text
@@ -287,8 +277,7 @@ class TestMissionScenarioIntegration:
         # surfaces in obs.investigation_result after reset.
         full_obs = obs.investigation_result or ""
         assert (
-            "[INTAKE: most-recent on-call note for the impacted service]"
-            in full_obs
+            "[INTAKE: most-recent on-call note for the impacted service]" in full_obs
             or "[INTAKE:" in intake_text
         )
 

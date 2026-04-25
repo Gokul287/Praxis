@@ -136,10 +136,7 @@ class TestHiddenDependency:
         for rc in ("db_pool_corrupted", "cdn_tls_expired", "worker_memory_leak"):
             _step_scenario(scenario, f"diagnose root_cause={rc}")
         outcome = _step_scenario(scenario, "rollback_deploy service=cdn")
-        assert (
-            outcome.info.get("event")
-            == "recovery.rollback_before_restart"
-        )
+        assert outcome.info.get("event") == "recovery.rollback_before_restart"
 
     def test_dependency_respecting_path_scores_higher(self):
         """Acceptance: bypassed-deps trajectory >= 0.05 lower than respecting one."""
@@ -163,9 +160,7 @@ class TestHiddenDependency:
 
         def total(commands: list[str]) -> float:
             scenario = _make_scenario()
-            return sum(
-                _step_scenario(scenario, c).reward for c in commands
-            )
+            return sum(_step_scenario(scenario, c).reward for c in commands)
 
         delta = total(respecting) - total(bypassing)
         # Acceptance criterion: bypassed-deps trajectory scores >= 0.05 lower.
@@ -256,15 +251,11 @@ class TestResolutionGate:
         result = env.step(
             PraxisAction(
                 command=(
-                    "submit_report root_causes=guess1,guess2,guess3 "
-                    "resolution=hope"
+                    "submit_report root_causes=guess1,guess2,guess3 resolution=hope"
                 )
             )
         )
-        assert (
-            result["info"]["event"]
-            == "submit_report.inconsistent_with_world_state"
-        )
+        assert result["info"]["event"] == "submit_report.inconsistent_with_world_state"
         state = env.state()
         assert state.incident_resolved is False
 
@@ -282,10 +273,7 @@ class TestResolutionGate:
                 )
             )
         )
-        assert (
-            result["info"]["event"]
-            == "submit_report.consistent_with_world_state"
-        )
+        assert result["info"]["event"] == "submit_report.consistent_with_world_state"
         assert result["done"] is True
         state = env.state()
         assert state.incident_resolved is True

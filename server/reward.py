@@ -451,8 +451,7 @@ class RewardEngine:
         if abs(weight_sum - 1.0) > 1e-6:
             names = ", ".join(f"{r.NAME}={r.weight:.3f}" for r in rubrics)
             raise ValueError(
-                f"Rubric weights must sum to 1.0; got {weight_sum:.6f} "
-                f"({names})"
+                f"Rubric weights must sum to 1.0; got {weight_sum:.6f} ({names})"
             )
         self._rubrics: tuple["Rubric", ...] = tuple(rubrics)
 

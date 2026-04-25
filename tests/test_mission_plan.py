@@ -162,9 +162,7 @@ class TestPlanningActions:
         result = _step(env, "checkpoint milestone=triage")
         assert result["info"]["event"] == "checkpoint.consistent"
 
-    def test_checkpoint_invalid_for_unknown_milestone(
-        self, env: PraxisEnvironment
-    ):
+    def test_checkpoint_invalid_for_unknown_milestone(self, env: PraxisEnvironment):
         _step(env, "create_plan milestones=triage,diagnose")
         result = _step(env, "checkpoint milestone=unknown")
         assert result["info"]["event"] == "checkpoint.invalid"
@@ -182,10 +180,7 @@ class TestPlanningActions:
             env,
             "submit_report root_causes=auth_typo resolution=rollback_deploy auth",
         )
-        assert (
-            result["info"]["event"]
-            == "submit_report.consistent_with_world_state"
-        )
+        assert result["info"]["event"] == "submit_report.consistent_with_world_state"
         assert result["reward"] > 0.0
 
     def test_request_clarification_rate_limited(self, env: PraxisEnvironment):

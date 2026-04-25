@@ -101,9 +101,7 @@ class ArtifactStore:
 
     def _load(self) -> None:
         if not self._root.is_dir():
-            raise FileNotFoundError(
-                f"ArtifactStore root not found: {self._root!s}"
-            )
+            raise FileNotFoundError(f"ArtifactStore root not found: {self._root!s}")
 
         for kind, subdir in _KIND_TO_DIR.items():
             kind_dir = self._root / subdir
@@ -116,8 +114,7 @@ class ArtifactStore:
 
         if not self._all_sources:
             raise FileNotFoundError(
-                f"ArtifactStore root contained no recognised fixtures: "
-                f"{self._root!s}"
+                f"ArtifactStore root contained no recognised fixtures: {self._root!s}"
             )
 
     def _index_file(self, kind: str, path: Path) -> None:
@@ -135,9 +132,7 @@ class ArtifactStore:
                     continue
                 # Each JSONL row becomes one artifact; the whole line is
                 # the body so callers can render it verbatim.
-                source = (
-                    f"{self.PROVENANCE_PREFIX}/{rel}#L{line_no}"
-                )
+                source = f"{self.PROVENANCE_PREFIX}/{rel}#L{line_no}"
                 src = _ArtifactSource(
                     kind=kind, service=service, body=line, source=source
                 )
@@ -148,9 +143,7 @@ class ArtifactStore:
             if not body:
                 return
             source = f"{self.PROVENANCE_PREFIX}/{rel}"
-            src = _ArtifactSource(
-                kind=kind, service=service, body=body, source=source
-            )
+            src = _ArtifactSource(kind=kind, service=service, body=body, source=source)
             self._index.setdefault((kind, service), []).append(src)
             self._all_sources.append(src)
 

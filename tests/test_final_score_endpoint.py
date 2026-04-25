@@ -33,9 +33,7 @@ def _state_dict_from_response(payload: dict) -> dict:
 
 
 def test_state_final_score_is_none_until_episode_done() -> None:
-    reset_response = client.post(
-        "/reset", json={"task_name": "single-service-alert"}
-    )
+    reset_response = client.post("/reset", json={"task_name": "single-service-alert"})
     assert reset_response.status_code == 200
     session_id = reset_response.json()["session_id"]
     headers = {"X-Session-Id": session_id}
@@ -45,18 +43,14 @@ def test_state_final_score_is_none_until_episode_done() -> None:
 
 
 def test_state_final_score_uses_outcome_times_efficiency() -> None:
-    reset_response = client.post(
-        "/reset", json={"task_name": "single-service-alert"}
-    )
+    reset_response = client.post("/reset", json={"task_name": "single-service-alert"})
     assert reset_response.status_code == 200
     session_id = reset_response.json()["session_id"]
     headers = {"X-Session-Id": session_id}
 
     done = False
     for command in OPTIMAL_SINGLE_SERVICE_ALERT:
-        step_response = client.post(
-            "/step", json={"command": command}, headers=headers
-        )
+        step_response = client.post("/step", json={"command": command}, headers=headers)
         assert step_response.status_code == 200
         body = step_response.json()
         done = bool(body["done"])
