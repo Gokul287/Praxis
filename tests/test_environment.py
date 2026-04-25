@@ -175,6 +175,11 @@ class TestObsToDict:
             "step_number",
             "memory_active",
             "saved_findings_count",
+            # Mission-aware fields (Issue #36)
+            "mission_id",
+            "phase",
+            "time_budget",
+            "pending_objectives",
         }
         assert required_keys == set(d.keys())
 

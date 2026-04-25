@@ -175,10 +175,32 @@ _MEMORY_EVENTS: Mapping[str, float] = {
 }
 
 
+# Planning-surface events emitted by the create_plan / revise_plan /
+# checkpoint / submit_report / request_clarification handlers (Issue #36).
+# Values match RewardPolicy.md Section 3.6.
+_PLANNING_EVENTS: Mapping[str, float] = {
+    "plan.created_pre_cutoff": 0.05,
+    "plan.created_post_cutoff": 0.0,
+    "plan.created_invalid": 0.0,
+    "plan.covers_all_root_causes": 0.10,
+    "plan.revised_after_evidence": 0.04,
+    "plan.revised_no_evidence": 0.0,
+    "plan.revise_no_op": 0.0,
+    "checkpoint.consistent": 0.02,
+    "checkpoint.invalid": 0.0,
+    "submit_report.consistent_with_world_state": 0.20,
+    "submit_report.inconsistent_with_world_state": 0.0,
+    "submit_report.no_diagnosis": 0.0,
+    "clarification.served": 0.0,
+    "clarification.exhausted": 0.0,
+}
+
+
 def _with_memory_events(events: Mapping[str, float]) -> dict[str, float]:
-    """Return a new event-value mapping with cross-task memory event rows."""
+    """Return a new event-value mapping with cross-task event rows."""
     merged = dict(events)
     merged.update(_MEMORY_EVENTS)
+    merged.update(_PLANNING_EVENTS)
     return merged
 
 
@@ -516,6 +538,15 @@ class RewardEngine:
             remediation_reward = effective_value
         elif event.startswith("escalation."):
             escalation_reward = effective_value
+        elif event.startswith(("plan.", "checkpoint.", "clarification.")):
+            # Planning surface events (Issue #36) — credit to the
+            # investigation bucket so they appear in step.info.breakdown.
+            investigation_reward = effective_value
+        elif event.startswith("submit_report."):
+            # Submitting a consistent report is the planning equivalent of
+            # remediation — fold it in there so terminal-rubric callers can
+            # still see the credit on the per-step breakdown.
+            remediation_reward = effective_value
 
         redundancy_penalty = policy.redundancy_penalty if duplicate else 0.0
         premature_penalty = policy.premature_penalty if premature else 0.0

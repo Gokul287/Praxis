@@ -28,6 +28,7 @@ import math
 import random
 from typing import Any
 
+from praxis_env.mission_plan import MissionPlan
 from praxis_env.models import (
     PraxisAction,
     PraxisObservation,
@@ -41,6 +42,18 @@ from praxis_env.scenarios.base import BaseScenario
 from praxis_env.trajectory import Trajectory, TrajectoryEvent
 from server.command_parser import parse_command
 from server.reward import MAX_REWARD, MIN_REWARD, RewardEngine, compute_task_score
+
+
+PLANNING_ACTION_TYPES: frozenset[str] = frozenset(
+    {
+        "create_plan",
+        "revise_plan",
+        "checkpoint",
+        "submit_report",
+        "request_clarification",
+    }
+)
+CLARIFICATION_BUDGET: int = 1
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +96,8 @@ class PraxisEnvironment:
         self._investigation_history: list[str] = []
         self._session_id: str = ""
         self._trajectory: Trajectory | None = None
+        self._mission_plan: MissionPlan = MissionPlan()
+        self._clarifications_used: int = 0
 
     @staticmethod
     def resolve_task_name(task_name: str) -> str:
@@ -188,6 +203,8 @@ class PraxisEnvironment:
             task_name=canonical_task_name,
             max_steps=self._scenario.MAX_STEPS,
         )
+        self._mission_plan = MissionPlan()
+        self._clarifications_used = 0
 
         obs = self._scenario.get_observation()
         # Override investigation_result with scenario's initial text
@@ -196,6 +213,7 @@ class PraxisEnvironment:
         )
         obs.memory_active = self._memory.is_active(self._scenario._step_count)
         obs.saved_findings_count = len(self._memory.saved_findings)
+        self._populate_mission_obs(obs)
         return obs
 
     def step(self, action: PraxisAction) -> dict[str, Any]:
@@ -239,6 +257,10 @@ class PraxisEnvironment:
 
         if parsed.action_type in {"save_finding", "recall_memory"}:
             outcome, reward_event = self._handle_memory_action(
+                parsed.action_type, parsed.params
+            )
+        elif parsed.action_type in PLANNING_ACTION_TYPES:
+            outcome, reward_event = self._handle_planning_action(
                 parsed.action_type, parsed.params
             )
         elif (
@@ -305,6 +327,7 @@ class PraxisEnvironment:
             )
         obs.memory_active = memory_active
         obs.saved_findings_count = len(self._memory.saved_findings)
+        self._populate_mission_obs(obs)
 
         info = dict(outcome.info or {})
         if reward_event is not None:
@@ -365,6 +388,13 @@ class PraxisEnvironment:
         state = self._scenario.get_state()
         state.memory_active = self._memory.is_active(self._scenario._step_count)
         state.session_id = self._session_id
+        state.plan = list(self._mission_plan.milestones)
+        state.checkpoints_completed = list(self._mission_plan.checkpoints_completed)
+        state.mission_id = getattr(self._scenario, "mission_id", None)
+        state.phase = getattr(self._scenario, "current_phase", None)
+        state.artifact_attribution = list(
+            getattr(self._scenario, "artifact_attribution", [])
+        )
         # Once the scenario is terminal we freeze the ADR-20 outcome x
         # efficiency score on the state snapshot so /state callers (the
         # baseline inference script + judges) see a stable final number.
@@ -394,7 +424,29 @@ class PraxisEnvironment:
             "step_number": obs.step_number,
             "memory_active": obs.memory_active,
             "saved_findings_count": obs.saved_findings_count,
+            "mission_id": obs.mission_id,
+            "phase": obs.phase,
+            "time_budget": obs.time_budget,
+            "pending_objectives": list(obs.pending_objectives),
         }
+
+    def _populate_mission_obs(self, obs: PraxisObservation) -> None:
+        """Stamp planning fields onto an outbound observation.
+
+        Mission-class scenarios expose ``mission_id`` / ``current_phase`` /
+        ``time_budget`` attributes; legacy scenarios leave them as ``None``.
+        ``pending_objectives`` always reflects the live MissionPlan so
+        non-mission scenarios still surface what the agent has planned.
+        """
+        if self._scenario is None:
+            return
+        obs.mission_id = getattr(self._scenario, "mission_id", None)
+        obs.phase = getattr(self._scenario, "current_phase", None)
+        scenario_budget = getattr(self._scenario, "time_budget", None)
+        obs.time_budget = (
+            int(scenario_budget) if scenario_budget is not None else None
+        )
+        obs.pending_objectives = list(self._mission_plan.pending_objectives)
 
     def _score_memory_event(self, event: str) -> float:
         """Score memory event tags through the shared reward engine."""
@@ -408,6 +460,332 @@ class PraxisEnvironment:
             root_cause_identified=self._scenario._root_cause_identified,
         )
         return result.reward
+
+    def _score_planning_event(self, event: str) -> float:
+        """Score plan/checkpoint/submit_report/clarification events."""
+        if self._scenario is None:
+            raise RuntimeError("Cannot score planning event before reset().")
+        result = self._reward_engine.score(
+            task_name=self._scenario.NAME,
+            event=event,
+            step_number=self._scenario._step_count + 1,
+            max_steps=self._scenario.MAX_STEPS,
+            # Allow submit_report.* to surface even before diagnosis is
+            # locked in — the consistency gate (matching world state) is
+            # handled inside the planning handler.
+            root_cause_identified=True,
+        )
+        return result.reward
+
+    def _handle_planning_action(
+        self,
+        action_type: str,
+        params: dict[str, str],
+    ) -> tuple[StepOutcome, str]:
+        """Execute a planning command and return outcome + reward event.
+
+        Mission-class scenarios may further constrain validation by
+        exposing ``mission_world_state()`` (a dict keyed for MissionPlan)
+        and ``submit_report_consistent(report_root_causes)`` hooks. Legacy
+        scenarios get a sensible scenario-agnostic default.
+        """
+        if self._scenario is None:
+            raise RuntimeError("Cannot handle planning action before reset().")
+
+        if action_type == "create_plan":
+            return self._handle_create_plan(params)
+        if action_type == "revise_plan":
+            return self._handle_revise_plan(params)
+        if action_type == "checkpoint":
+            return self._handle_checkpoint(params)
+        if action_type == "submit_report":
+            return self._handle_submit_report(params)
+        if action_type == "request_clarification":
+            return self._handle_request_clarification(params)
+
+        # Defensive guard — PLANNING_ACTION_TYPES is the source of truth.
+        raise ValueError(f"Unhandled planning action: {action_type!r}")
+
+    def _handle_create_plan(
+        self, params: dict[str, str]
+    ) -> tuple[StepOutcome, str]:
+        assert self._scenario is not None
+        raw_milestones = params.get("milestones", "")
+        milestones = [m.strip() for m in raw_milestones.split(",") if m.strip()]
+        if not milestones:
+            event = "plan.created_invalid"
+            result_text = (
+                "Invalid create_plan command.\n"
+                "Expected: create_plan milestones=<m1,m2,m3,...>"
+            )
+        elif self._mission_plan.milestones:
+            # Plan already exists - tell the agent to use revise_plan.
+            event = "plan.created_invalid"
+            result_text = (
+                "Plan already exists.\n"
+                f"Current milestones: {', '.join(self._mission_plan.milestones)}\n"
+                "Use revise_plan add=<new>, replace=<old> with=<new>, or remove=<old>."
+            )
+        else:
+            self._mission_plan.create(milestones)
+            cutoff = self._memory.CONTEXT_CUTOFF_STEP
+            if (self._scenario._step_count + 1) <= cutoff:
+                event = "plan.created_pre_cutoff"
+            else:
+                event = "plan.created_post_cutoff"
+            result_text = (
+                "Plan created with "
+                f"{len(self._mission_plan.milestones)} milestones: "
+                f"{', '.join(self._mission_plan.milestones)}"
+            )
+        reward = self._score_planning_event(event)
+        outcome = StepOutcome(
+            investigation_result=result_text,
+            reward=reward,
+            done=self._scenario.is_done(),
+            incident_resolved=self._scenario._incident_resolved,
+            root_cause_identified=self._scenario._root_cause_identified,
+            info={"event": event},
+        )
+        return outcome, event
+
+    def _handle_revise_plan(
+        self, params: dict[str, str]
+    ) -> tuple[StepOutcome, str]:
+        assert self._scenario is not None
+        had_evidence = self._has_investigation_evidence()
+        if not self._mission_plan.milestones:
+            event = "plan.revise_no_op"
+            result_text = (
+                "No plan to revise. Use create_plan first."
+            )
+        else:
+            applied = self._mission_plan.revise(
+                replace=params.get("replace"),
+                with_=params.get("with"),
+                add=params.get("add"),
+                remove=params.get("remove"),
+            )
+            if not applied:
+                event = "plan.revise_no_op"
+                result_text = (
+                    "Revision had no effect.\n"
+                    "Expected one of: revise_plan add=<new>, "
+                    "revise_plan remove=<old>, "
+                    "revise_plan replace=<old> with=<new>."
+                )
+            elif had_evidence:
+                event = "plan.revised_after_evidence"
+                result_text = (
+                    f"Plan revised. Current milestones: "
+                    f"{', '.join(self._mission_plan.milestones)}"
+                )
+            else:
+                event = "plan.revised_no_evidence"
+                result_text = (
+                    "Plan revised before any investigation evidence. "
+                    f"Current milestones: "
+                    f"{', '.join(self._mission_plan.milestones)}"
+                )
+        reward = self._score_planning_event(event)
+        outcome = StepOutcome(
+            investigation_result=result_text,
+            reward=reward,
+            done=self._scenario.is_done(),
+            incident_resolved=self._scenario._incident_resolved,
+            root_cause_identified=self._scenario._root_cause_identified,
+            info={"event": event},
+        )
+        return outcome, event
+
+    def _handle_checkpoint(
+        self, params: dict[str, str]
+    ) -> tuple[StepOutcome, str]:
+        assert self._scenario is not None
+        milestone = (params.get("milestone") or "").strip()
+        world_state = self._mission_world_state()
+        accepted = self._mission_plan.checkpoint(milestone, world_state)
+        if accepted:
+            event = "checkpoint.consistent"
+            result_text = f"Checkpoint accepted: {milestone}"
+        else:
+            event = "checkpoint.invalid"
+            if not milestone:
+                result_text = (
+                    "Invalid checkpoint command.\n"
+                    "Expected: checkpoint milestone=<name>"
+                )
+            elif milestone not in self._mission_plan.milestones:
+                result_text = (
+                    f"Milestone {milestone!r} is not part of the current plan."
+                )
+            else:
+                result_text = (
+                    f"Milestone {milestone!r} could not be checkpointed "
+                    "given the current world state."
+                )
+        reward = self._score_planning_event(event)
+        outcome = StepOutcome(
+            investigation_result=result_text,
+            reward=reward,
+            done=self._scenario.is_done(),
+            incident_resolved=self._scenario._incident_resolved,
+            root_cause_identified=self._scenario._root_cause_identified,
+            info={"event": event},
+        )
+        return outcome, event
+
+    def _handle_submit_report(
+        self, params: dict[str, str]
+    ) -> tuple[StepOutcome, str]:
+        assert self._scenario is not None
+        raw_root_causes = params.get("root_causes", "")
+        report_causes = [
+            c.strip() for c in raw_root_causes.split(",") if c.strip()
+        ]
+        resolution = (params.get("resolution") or "").strip()
+        if not report_causes:
+            event = "submit_report.inconsistent_with_world_state"
+            result_text = (
+                "Invalid submit_report command.\n"
+                "Expected: submit_report root_causes=<c1,c2> resolution=<text>"
+            )
+        elif self._submit_report_consistent(report_causes, resolution):
+            event = "submit_report.consistent_with_world_state"
+            result_text = (
+                "Report accepted. Root causes: "
+                f"{', '.join(report_causes)}"
+            )
+        elif not self._scenario._root_cause_identified:
+            event = "submit_report.no_diagnosis"
+            result_text = (
+                "Report rejected: root cause has not yet been "
+                "confirmed via diagnose."
+            )
+        else:
+            event = "submit_report.inconsistent_with_world_state"
+            result_text = (
+                "Report rejected: claimed root causes are inconsistent "
+                "with observed world state."
+            )
+        reward = self._score_planning_event(event)
+        outcome = StepOutcome(
+            investigation_result=result_text,
+            reward=reward,
+            done=self._scenario.is_done(),
+            incident_resolved=self._scenario._incident_resolved,
+            root_cause_identified=self._scenario._root_cause_identified,
+            info={"event": event},
+        )
+        return outcome, event
+
+    def _handle_request_clarification(
+        self, params: dict[str, str]
+    ) -> tuple[StepOutcome, str]:
+        assert self._scenario is not None
+        topic = (params.get("topic") or "next").strip().lower()
+        if self._clarifications_used >= CLARIFICATION_BUDGET:
+            event = "clarification.exhausted"
+            result_text = (
+                "Clarification budget exhausted for this episode "
+                f"(limit={CLARIFICATION_BUDGET})."
+            )
+        else:
+            self._clarifications_used += 1
+            event = "clarification.served"
+            result_text = self._format_clarification(topic)
+        reward = self._score_planning_event(event)
+        outcome = StepOutcome(
+            investigation_result=result_text,
+            reward=reward,
+            done=self._scenario.is_done(),
+            incident_resolved=self._scenario._incident_resolved,
+            root_cause_identified=self._scenario._root_cause_identified,
+            info={"event": event, "clarifications_used": self._clarifications_used},
+        )
+        return outcome, event
+
+    _INVESTIGATION_ACTION_TYPES: frozenset[str] = frozenset(
+        {
+            "query_logs",
+            "check_metrics",
+            "check_deps",
+            "check_config",
+            "check_runbook",
+            "diagnose",
+            "recall_memory",
+        }
+    )
+
+    def _has_investigation_evidence(self) -> bool:
+        """True iff the agent has executed at least one investigation action.
+
+        ``revise_plan`` semantically rewards revisions that reflect new
+        evidence; pure planning -> revise toggles must not earn that
+        credit. We check the trajectory rather than ``_investigation_history``
+        (which fills on every step, including planning ones).
+        """
+        if self._trajectory is None:
+            return False
+        for event in self._trajectory.events:
+            if event.action_type in self._INVESTIGATION_ACTION_TYPES:
+                return True
+            tag = event.event_tag or ""
+            if tag.startswith(("investigation.", "memory.")):
+                return True
+        return False
+
+    def _mission_world_state(self) -> dict[str, Any]:
+        """Snapshot of the live scenario state used by MissionPlan checks."""
+        if self._scenario is None:
+            return {}
+        if hasattr(self._scenario, "mission_world_state"):
+            try:
+                return dict(self._scenario.mission_world_state())  # type: ignore[attr-defined]
+            except Exception:
+                logger.exception("scenario.mission_world_state() failed")
+        return {}
+
+    def _submit_report_consistent(
+        self, root_causes: list[str], resolution: str
+    ) -> bool:
+        """Default consistency check for submit_report.
+
+        Mission-class scenarios may override via ``submit_report_consistent``;
+        the default rule is "scenario has flagged the root cause as
+        identified", which preserves baseline-friendly behaviour without
+        leaking ground truth into legacy scenarios.
+        """
+        if self._scenario is None:
+            return False
+        check = getattr(self._scenario, "submit_report_consistent", None)
+        if callable(check):
+            try:
+                return bool(check(root_causes=root_causes, resolution=resolution))
+            except Exception:
+                logger.exception("scenario.submit_report_consistent() failed")
+                return False
+        return bool(self._scenario._root_cause_identified)
+
+    def _format_clarification(self, topic: str) -> str:
+        """Produce a small clarification payload tied to scenario state."""
+        if self._scenario is None:
+            return ""
+        affected = list(getattr(self._scenario, "INITIAL_AFFECTED_SERVICES", []))
+        if topic == "service" and affected:
+            return f"Affected services: {', '.join(affected)}"
+        if topic == "artifact":
+            attribution = getattr(self._scenario, "artifact_attribution", []) or []
+            if attribution:
+                return f"Artifact sources: {', '.join(attribution)}"
+            return "No vendored artifacts referenced for this scenario."
+        # 'next' / unknown -> hint at the next pending milestone.
+        pending = self._mission_plan.pending_objectives
+        if pending:
+            return f"Next pending milestone: {pending[0]}"
+        return (
+            "No pending objectives. Run create_plan or finish remediation."
+        )
 
     def _handle_memory_action(
         self,
