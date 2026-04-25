@@ -22,12 +22,14 @@ Calibration rationale (updated for difficulty-curve fix):
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Mapping
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Mapping, Sequence
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from praxis_env.models import PraxisState
+    from praxis_env.rubrics.base import Rubric, RubricResult
+    from praxis_env.trajectory import Trajectory
 
 
 MIN_REWARD = 0.01
@@ -69,8 +71,14 @@ def compute_task_score(state: "PraxisState", *, max_steps: int) -> float:
 
 
 @dataclass(frozen=True)
-class RewardBreakdown:
-    """Per-component score contribution for one agent action."""
+class RewardComponents:
+    """Per-component score contribution for one agent action.
+
+    Renamed from ``RewardBreakdown`` in Issue #35 so the name is freed for the
+    new 5-field rubric breakdown defined below. Field shape and semantics are
+    unchanged so callers reading ``RewardResult.breakdown.<field>`` continue
+    to work.
+    """
 
     investigation_reward: float = 0.0
     redundancy_penalty: float = 0.0
@@ -101,11 +109,48 @@ class RewardBreakdown:
 
 
 @dataclass(frozen=True)
+class RewardBreakdown:
+    """4-rubric weighted breakdown surfaced via /step ``info.breakdown``.
+
+    Implements the contract from RewardPolicy.md Section 8.2: weighted sum of
+    four composable rubrics (planning + memory + recovery + terminal) clamped
+    into the judge-safe open interval ``[0.01, 0.99]``. ``per_rubric`` carries
+    each rubric's name -> ``RubricResult`` so judges and the GRPO loss
+    visualisation can attribute credit at the rubric level.
+    """
+
+    planning: float
+    memory: float
+    recovery: float
+    terminal: float
+    total: float
+    per_rubric: dict[str, "RubricResult"] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "planning": self.planning,
+            "memory": self.memory,
+            "recovery": self.recovery,
+            "terminal": self.terminal,
+            "total": self.total,
+            "per_rubric": {
+                name: {
+                    "value": r.value,
+                    "weight": r.weight,
+                    "weighted": r.weighted,
+                    "notes": r.notes,
+                }
+                for name, r in self.per_rubric.items()
+            },
+        }
+
+
+@dataclass(frozen=True)
 class RewardResult:
     """Final clamped reward and detailed component accounting."""
 
     reward: float
-    breakdown: RewardBreakdown
+    breakdown: RewardComponents
 
 
 @dataclass(frozen=True)
@@ -339,14 +384,74 @@ DEFAULT_REWARD_POLICIES: dict[str, RewardPolicy] = {
 
 
 class RewardEngine:
-    """Deterministic event-based reward calculator shared by all scenarios."""
+    """Deterministic event-based reward calculator shared by all scenarios.
 
-    def __init__(self, policies: Mapping[str, RewardPolicy] | None = None) -> None:
+    The engine has two scoring surfaces:
+      * ``score(task_name, event=...)``           -> ``RewardResult`` (per step)
+      * ``score_trajectory(trajectory)``           -> ``RewardBreakdown`` (rubric)
+
+    The rubric bundle MUST sum to weight 1.0 (asserted at init time, see
+    `RewardPolicy.md` Section 8.2). Passing ``rubrics=None`` loads the
+    spec-default 4-rubric bundle from ``praxis_env.rubrics``.
+    """
+
+    def __init__(
+        self,
+        policies: Mapping[str, RewardPolicy] | None = None,
+        *,
+        rubrics: Sequence["Rubric"] | None = None,
+    ) -> None:
         self._policies = dict(policies or DEFAULT_REWARD_POLICIES)
+
+        if rubrics is None:
+            from praxis_env.rubrics import default_rubric_bundle
+
+            rubrics = default_rubric_bundle()
+
+        if not rubrics:
+            raise ValueError("RewardEngine requires at least one rubric")
+
+        weight_sum = sum(r.weight for r in rubrics)
+        # 1e-6 accommodates float drift from spec-defined weight literals.
+        if abs(weight_sum - 1.0) > 1e-6:
+            names = ", ".join(f"{r.NAME}={r.weight:.3f}" for r in rubrics)
+            raise ValueError(
+                f"Rubric weights must sum to 1.0; got {weight_sum:.6f} "
+                f"({names})"
+            )
+        self._rubrics: tuple["Rubric", ...] = tuple(rubrics)
 
     def register_policy(self, task_name: str, policy: RewardPolicy) -> None:
         """Register or replace a task-level reward policy at runtime."""
         self._policies[task_name] = policy
+
+    @property
+    def rubrics(self) -> tuple["Rubric", ...]:
+        return self._rubrics
+
+    def score_trajectory(self, trajectory: "Trajectory") -> RewardBreakdown:
+        """Score a `Trajectory` with the configured composable rubrics."""
+        per_rubric: dict[str, "RubricResult"] = {}
+        weighted_total = 0.0
+        for rubric in self._rubrics:
+            result = rubric.score(trajectory)
+            per_rubric[result.name] = result
+            weighted_total += result.weighted
+
+        return RewardBreakdown(
+            planning=per_rubric.get("planning").value
+            if "planning" in per_rubric
+            else 0.0,
+            memory=per_rubric.get("memory").value if "memory" in per_rubric else 0.0,
+            recovery=per_rubric.get("recovery").value
+            if "recovery" in per_rubric
+            else 0.0,
+            terminal=per_rubric.get("terminal").value
+            if "terminal" in per_rubric
+            else 0.0,
+            total=clamp_reward(weighted_total),
+            per_rubric=per_rubric,
+        )
 
     def score(
         self,
@@ -384,10 +489,10 @@ class RewardEngine:
             )
 
         if event.startswith("remediation.") and not root_cause_identified:
-            breakdown = RewardBreakdown(total_unclamped=0.0)
+            components = RewardComponents(total_unclamped=0.0)
             return RewardResult(
-                reward=clamp_reward(breakdown.total_unclamped),
-                breakdown=breakdown,
+                reward=clamp_reward(components.total_unclamped),
+                breakdown=components,
             )
 
         event_value = policy.event_values.get(event, 0.0)
@@ -442,7 +547,7 @@ class RewardEngine:
             + time_pressure_cost
         )
 
-        breakdown = RewardBreakdown(
+        components = RewardComponents(
             investigation_reward=investigation_reward,
             redundancy_penalty=redundancy_penalty,
             diagnosis_reward=diagnosis_reward,
@@ -458,5 +563,5 @@ class RewardEngine:
 
         return RewardResult(
             reward=clamp_reward(total_unclamped),
-            breakdown=breakdown,
+            breakdown=components,
         )
