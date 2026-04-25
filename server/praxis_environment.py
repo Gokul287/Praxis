@@ -177,6 +177,14 @@ class PraxisEnvironment:
                 seed=resolved_seed,
                 difficulty=procedural_difficulty,
             )
+        elif canonical_task_name == "cascading-platform-failure":
+            # Mission scenarios accept an optional seed for deterministic
+            # disturbance injection. Fall back to 0 so omitting `seed=`
+            # gives the same trajectory across repeated /reset calls.
+            self._scenario = get_scenario(
+                canonical_task_name,
+                seed=resolved_seed,
+            )
         else:
             self._scenario = get_scenario(canonical_task_name)
 
