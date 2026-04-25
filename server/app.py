@@ -37,6 +37,7 @@ from slowapi.util import get_remote_address
 
 from praxis_env.artifacts import load_default_store
 from praxis_env.models import PraxisAction, PraxisObservation, PraxisState
+from praxis_env.scenarios import SCENARIO_REGISTRY
 from server.praxis_environment import PraxisEnvironment
 from server.session_manager import Session, SessionManager
 
@@ -77,6 +78,31 @@ def _data_sources_metadata() -> list[dict[str, Any]]:
             }
         )
     return sources
+
+
+_TASK_DIFFICULTY: dict[str, str] = {
+    "single-service-alert": "easy",
+    "ambiguous-incident": "medium",
+    "cascading-failure": "hard",
+    "memory-leak": "hard",
+    "cascading-platform-failure": "hard",
+    "procedural-incident": "medium",
+}
+
+
+def _tasks_metadata() -> list[dict[str, Any]]:
+    """Return /metadata task entries from the registered scenario catalog."""
+    entries: list[dict[str, Any]] = []
+    for task_name in task_catalog:
+        scenario_cls = SCENARIO_REGISTRY[task_name]
+        entries.append(
+            {
+                "name": task_name,
+                "difficulty": _TASK_DIFFICULTY.get(task_name, "medium"),
+                "max_steps": int(getattr(scenario_cls, "MAX_STEPS", 15)),
+            }
+        )
+    return entries
 
 
 DEFAULT_RATE_LIMIT = os.getenv("PRAXIS_RATE_LIMIT_DEFAULT", "120/minute")
@@ -182,17 +208,7 @@ def create_app() -> FastAPI:
             ),
             "supports_concurrent_sessions": True,
             "themes": ["long-horizon-planning"],
-            "tasks": [
-                {"name": "single-service-alert", "difficulty": "easy", "max_steps": 15},
-                {"name": "ambiguous-incident", "difficulty": "medium", "max_steps": 25},
-                {"name": "cascading-failure", "difficulty": "hard", "max_steps": 20},
-                {"name": "memory-leak", "difficulty": "hard", "max_steps": 25},
-                {
-                    "name": "procedural-incident",
-                    "difficulty": "medium",
-                    "max_steps": 25,
-                },
-            ],
+            "tasks": _tasks_metadata(),
             "endpoints": {
                 "reset": "/reset",
                 "step": "/step",

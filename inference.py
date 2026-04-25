@@ -36,7 +36,7 @@ MAX_STEPS_BY_TASK = {
     "cascading-failure": 20,
     "ambiguous-incident": 25,
     "memory-leak": 25,
-    "cascading-platform-failure": 120,
+    "cascading-platform-failure": 150,
 }
 
 FALLBACK_COMMANDS = {

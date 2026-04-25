@@ -314,3 +314,15 @@ class TestMetadataEndpoint:
             assert mission_src["provenance_prefix"] == "praxis:fixtures"
             assert mission_src["artifact_count"] >= 1
             assert "attribution" in mission_src
+
+    def test_metadata_tasks_match_registered_catalog(self) -> None:
+        from server.app import app
+        from server.praxis_environment import PraxisEnvironment
+
+        with TestClient(app) as client:
+            r = client.get("/metadata")
+            assert r.status_code == 200
+            tasks = {task["name"]: task for task in r.json()["tasks"]}
+
+        assert set(tasks) == set(PraxisEnvironment().list_tasks())
+        assert tasks["cascading-platform-failure"]["max_steps"] == 150
