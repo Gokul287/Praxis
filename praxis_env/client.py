@@ -153,6 +153,11 @@ class PraxisEnv:
             session_id=data.get("session_id", ""),
             memory_active=data.get("memory_active", False),
             final_score=data.get("final_score"),
+            mission_id=data.get("mission_id"),
+            phase=data.get("phase"),
+            plan=data.get("plan", []),
+            checkpoints_completed=data.get("checkpoints_completed", []),
+            artifact_attribution=data.get("artifact_attribution", []),
         )
 
     async def close(self) -> None:
@@ -187,4 +192,8 @@ def _parse_observation(data: dict) -> PraxisObservation:
         severity=data["severity"],
         services_affected=data["services_affected"],
         step_number=int(data["step_number"]),
+        mission_id=data.get("mission_id"),
+        phase=data.get("phase"),
+        time_budget=data.get("time_budget"),
+        pending_objectives=data.get("pending_objectives", []),
     )

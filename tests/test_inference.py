@@ -132,6 +132,12 @@ def test_mission_inference_budget_matches_scenario_contract():
     assert inference.MAX_STEPS_BY_TASK["cascading-platform-failure"] == 150
 
 
+def test_mission_fallback_sequence_can_reach_submit_report_with_default_cap():
+    commands = inference.FALLBACK_COMMANDS["cascading-platform-failure"]
+    assert len(commands) <= inference.MAX_STEPS_CAP
+    assert commands[-1].startswith("submit_report ")
+
+
 def test_fallback_command_sequences_start_correctly():
     assert (
         inference.fallback_command("single-service-alert", 1)

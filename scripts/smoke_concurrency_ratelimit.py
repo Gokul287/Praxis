@@ -21,8 +21,9 @@ import urllib.error
 import urllib.request
 
 
-def _request(method: str, url: str, *, body: dict | None = None,
-             headers: dict | None = None) -> tuple[int, dict[str, str], Any]:
+def _request(
+    method: str, url: str, *, body: dict | None = None, headers: dict | None = None
+) -> tuple[int, dict[str, str], Any]:
     data = None if body is None else json.dumps(body).encode("utf-8")
     h = {"Content-Type": "application/json"}
     if headers:
@@ -87,19 +88,20 @@ def ratelimit_smoke(base: str) -> None:
         body={"task_name": "single-service-alert", "seed": 7},
     )
     assert status == 200
-    sid = _request("POST", f"{base}/reset",
-                   body={"task_name": "single-service-alert",
-                         "seed": 8})[2]["session_id"]
+    sid = _request(
+        "POST", f"{base}/reset", body={"task_name": "single-service-alert", "seed": 8}
+    )[2]["session_id"]
 
     rl_keys = [
-        k for k in headers
-        if k.lower().startswith("ratelimit")
-        or k.lower().startswith("x-ratelimit")
+        k
+        for k in headers
+        if k.lower().startswith("ratelimit") or k.lower().startswith("x-ratelimit")
     ]
     print(f"[ratelimit] /reset response RateLimit-* headers: {rl_keys}")
     assert rl_keys, "expected slowapi to emit RateLimit-* headers on /reset"
 
     saw_429 = False
+    retry_after: str | None = None
     for i in range(120):
         status, hdr, body = _request(
             "POST",
@@ -109,13 +111,12 @@ def ratelimit_smoke(base: str) -> None:
         )
         if status == 429:
             saw_429 = True
+            retry_after = hdr.get("Retry-After") or hdr.get("retry-after")
             print(f"[ratelimit] hit 429 after {i + 1} bursts: OK")
-            print(f"[ratelimit] retry-after header: "
-                  f"{hdr.get('Retry-After') or hdr.get('retry-after')}")
+            print(f"[ratelimit] retry-after header: {retry_after}")
             break
-    if not saw_429:
-        print("[ratelimit] WARN: did not hit 429 within 120 bursts (limit may "
-              "be configured higher)")
+    assert saw_429, "expected /step burst to eventually return HTTP 429"
+    assert retry_after is not None, "expected 429 response to include Retry-After"
 
 
 async def main() -> int:
