@@ -94,8 +94,8 @@ HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("OPENAI_API_KEY") or os.getenv("AP
 
 MODEL_TIMEOUT_SECONDS = float(os.getenv("MODEL_TIMEOUT_SECONDS", "8"))
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0"))
-MAX_TOKENS = int(os.getenv("MAX_TOKENS", "96"))
-SUCCESS_SCORE_THRESHOLD = float(os.getenv("SUCCESS_SCORE_THRESHOLD", "0.10"))
+MAX_TOKENS = int(os.getenv("MAX_TOKENS", "256"))
+SUCCESS_SCORE_THRESHOLD = float(os.getenv("SUCCESS_SCORE_THRESHOLD", "0.50"))
 MAX_STEPS_CAP = int(os.getenv("MAX_STEPS_CAP", "25"))
 OUTPUT_MIN_REWARD = 0.01
 OUTPUT_MAX_REWARD = 0.99
