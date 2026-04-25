@@ -202,6 +202,109 @@ Cross-link to ADR-13: the new scenario enforces a hard evidence gate where remed
 
 ---
 
+## ADR-16 — MissionOps pivot: long-horizon mission, scattered instructions, recovery (NEW)
+
+**Date**: 2026-04-26 · **Status**: Accepted · **Issues**: #25, #26 · **Source**: `FlawsToProduction/Verdict.md`, `FlawsToProduction/The Situation First.md`, S26, S28, UltraHorizon long-horizon failure modes (S36).
+
+We rebrand the env "Praxis MissionOps" and lift `cascading-platform-failure` from a long incident into a true **mission**: 80–150 turns, multi-phase (Intake / Exploration / Planning / Execution / Disturbance / Recovery / Completion / Reflection), scattered instructions across artifacts (runbooks / tickets / notes / configs), hidden dependencies, and explicit `create_plan` / `revise_plan` / `checkpoint` / `submit_report` planning actions.
+
+Why now: the hackathon judges' single highest-weight criterion (40%) is **environment innovation** — _"Could a researcher write a paper about training on this?"_ A scripted incident extension feels like a stretched benchmark; a layered mission with planning + memory + recovery is a publishable long-horizon agent training environment. `FlawsToProduction/Verdict.md` is explicit: _"the strongest feature to add is Praxis MissionOps… hits all four judging axes at once."_
+
+Alternatives considered:
+
+- **Pragmatic (keep mega-incident as a long incident, just tighten)** — rejected: leaves the 40% innovation axis on the table.
+- **Hybrid (split rubrics now but keep mega-incident shape)** — rejected: half-pivot is still demoable but doesn't tell the "I rewrote my benchmark to be MissionOps" story judges remember.
+
+Trade-off accepted: ~6 of the 17 issues change shape; 24–36 h is tight but the upside is a ranking-tier differentiator.
+
+---
+
+## ADR-17 — Rootly AI Labs `logs-dataset` as artifact store (NEW)
+
+**Date**: 2026-04-26 · **Status**: Accepted · **Issue**: #27 · **Source**: `FlawsToProduction/The Situation First.md` (S33), Rootly logs-dataset (Apache-2.0).
+
+Add `praxis_env/artifacts.py` `ArtifactStore` that loads a vendored sample of the Rootly AI Labs `logs-dataset` (real production access + error logs) and injects log/ticket/runbook excerpts into MissionOps + `memory-leak` scenarios via deterministic `ArtifactStore.draw(seed, kind, n)`.
+
+Why now: _"No other team at this hackathon is using actual production log data as mission artifacts inside their environment"_ (`FlawsToProduction/The Situation First.md`). Real log patterns are recognised by Meta engineers in seconds; synthetic strings feel hollow.
+
+Alternatives considered:
+
+- **Live download at runtime** — rejected: HF Space cold-start latency + ToS risk + offline-judging risk. Vendor a small Apache-2.0 sample with NOTICE.md.
+- **Paraphrase 6–10 lines** (the "lite" option) — rejected during scope decision; the user picked full integration.
+- **SRE-skills-bench cross-validation** (S34) — kept as stretch in the README "external transfer eval" section, not a blocker.
+
+Trade-off accepted: ~3 h added to Issue #27; licensing and provenance must be documented in `NOTICE.md`.
+
+---
+
+## ADR-18 — Composable Rubrics: Planning / Memory / Recovery / Terminal (NEW)
+
+**Date**: 2026-04-26 · **Status**: Accepted · **Issue**: #24 · **Source**: `FlawsToProduction/Verdict.md` §"Reward design", S20, hackathon checklist item #13 (verbatim _"Uses OpenEnv's Rubric system thoughtfully (composable rubrics > monolithic scoring)"_).
+
+Refactor `server/reward.py` from a single `RewardEngine` with monolithic `event_values` into 4 first-class rubric objects, each implementing `score(trajectory) -> RubricResult`:
+
+| Rubric | Weight | Scores |
+| --- | --- | --- |
+| `PlanningRubric` | 0.20 | `create_plan` covers root causes, plan revisions track new evidence, milestone ordering. |
+| `MemoryRubric` | 0.20 | `save_finding` foresight, `recall_memory` after cutoff, illegal-log penalty, empty-recall penalty. |
+| `RecoveryRubric` | 0.20 | Detect early mistakes; rollback or re-plan after disturbance; cost of irreversible actions. |
+| `TerminalRubric` | 0.40 | Verified world state: `incident_resolved=True` + `_root_cause_identified=True` + audit-consistent submit_report. |
+
+Weights sum to 1.0; each rubric is independently unit-testable in `tests/test_rubrics.py` and visible in the `RewardEngine.score()` breakdown so README + the GRPO loss shows credit attribution.
+
+Why now: judges literally check this checkbox (verbatim hackathon checklist item #13). Composable rubrics also future-proof us against Anthropic's evals which mix-and-match scorers.
+
+Alternatives considered:
+
+- **Single weighted scalar** — rejected: judges' literal phrasing rejects this.
+- **>4 rubrics** (e.g., add `EfficiencyRubric`) — rejected: orthogonality drops; efficiency lives inside the score formula (ADR-20), not a rubric.
+
+Trade-off accepted: ~2 h refactor of `server/reward.py`; existing per-task `event_values` become inputs to the rubrics rather than the source of truth.
+
+---
+
+## ADR-19 — Unsloth + multi-turn GRPO (mtGRPO) trainer (NEW)
+
+**Date**: 2026-04-26 · **Status**: Accepted · **Issues**: #31, #32 · **Source**: `FlawsToProduction/The Situation First.md` (S35), Unsloth GRPO docs, mtGRPO (turn-level credit assignment).
+
+`train_praxis_grpo.py` switches from plain TRL `GRPOTrainer` to **Unsloth + mtGRPO**: turn-level credit assignment for multi-turn trajectories, ~2.5× throughput, stable gradients on sparse-reward tasks. Targets `Qwen/Qwen2.5-7B-Instruct` (fallback `Qwen2.5-3B-Instruct` if Colab T4 OOMs). Logs to **Trackio + WandB public run**.
+
+Why now: MissionOps trajectories are 80–300 turns with sparse terminal reward. Plain GRPO collapses on long trajectories without turn-level credit; mtGRPO is the literature-justified fix.
+
+Alternatives considered:
+
+- **TRL GRPO only** — rejected: plain GRPO underperforms on multi-turn sparse rewards (`FlawsToProduction/The Situation First.md`: _"mtGRPO… 2.5× throughput vs standard GRPO and stable gradients on sparse-reward tasks"_).
+- **PPO** — rejected: TRL/Unsloth GRPO is the hackathon-aligned path; judges expect GRPO output.
+
+Trade-off accepted: an extra dep (`unsloth`) in PEP 723; Colab GPU constraint may force the 3B fallback for the published curve.
+
+---
+
+## ADR-20 — Score = outcome_quality × efficiency_factor (NEW)
+
+**Date**: 2026-04-26 · **Status**: Accepted · **Issue**: #23 · **Source**: `FlawsToProduction/Critical Mistakes (Real-World Failures).md` Mistake 9, GAIA / SWE-bench scoring conventions.
+
+Replace `compute_task_score = sum(rewards) / len(rewards)` (avg reward) with:
+
+```
+score = outcome_quality * (1 - steps_taken / max_steps)
+```
+
+Where `outcome_quality ∈ [0, 1]` requires `_incident_resolved=True` AND `_root_cause_identified=True`; otherwise `outcome_quality = 0`. Final score still clamps to `[0.01, 0.99]` per ADR-03.
+
+Why now: the previous formula treats a wandering 20-step run identically to a targeted 4-step run (`FlawsToProduction/Critical Mistakes`: _"a model that gets 0.05 reward per step for 20 steps scores the same as a model that gets 0.50 in 4 targeted steps. Exploration is not penalized in the score."_). Fixes the differentiation problem so `Qwen-7B (fallback) score=0.18` no longer ties `GPT-4o score=0.71`.
+
+Combined with ADR-13 / ADR-15 (evidence gate), this kills 3 reward-hacking exploits at once: avg-reward wandering, remediation-without-diagnosis, and `SUCCESS_SCORE_THRESHOLD=0.10` triviality (Issue #22 raises threshold to 0.50).
+
+Alternatives considered:
+
+- **Outcome-only** (1 if resolved, 0 else) — rejected: loses gradient information that GRPO uses.
+- **Outcome × log(efficiency)** — rejected: too sharp on short tasks; linear factor is judge-readable.
+
+Trade-off accepted: existing baseline scores recompute; the 3-row `docs/baseline_scores.md` table refreshes during Issue #30; trained-vs-baseline curves in #32 use the new formula consistently.
+
+---
+
 ## How to add a new ADR
 
 1. Append at the bottom with the next number.

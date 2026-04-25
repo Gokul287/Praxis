@@ -1,171 +1,187 @@
-# Praxis -> Theme #2: Final Execution Plan (v2.1)
+# Praxis MissionOps — Final Execution Plan (v3.0)
 
-> **Status**: 21 issues defined, decisions locked, docs aligned with reality (audit patch v2.1 absorbed)
-> **Hackathon**: OpenEnv India 2026 | April 25-26
-> **Theme**: #2 -- (Super) Long-Horizon Planning & Instruction Following
-> **Plan source of truth**: `idea/Plan/github_issues.md` (21 issues), `idea/Plan/Architecture/*` (7 docs), `idea/Plan/Demo/*`, `idea/Plan/Project/*`, `idea/Plan/Submission/*`.
+> **Status**: 17 implementation issues (`#22 → #38`) + 1 tracker issue (`#39`). Pivot to MissionOps locked. Rootly real-data integration locked. Composable rubrics locked. Unsloth + multi-turn GRPO training pipeline locked.
+> **Hackathon**: OpenEnv India 2026 — submission deadline ≤ 15 hours from T+0.
+> **Theme**: #2 — (Super) Long-Horizon Planning & Instruction Following.
+> **Plan source of truth**: [`idea/Plan/github_issues.md`](./github_issues.md), [`idea/Plan/Architecture/*`](./Architecture/), [`idea/Plan/Demo/*`](./Demo/), [`idea/Plan/Submission/*`](./Submission/), [`idea/Plan/Project/DecisionLog.md`](./Project/DecisionLog.md), [`idea/Plan/Project/EvidenceIndex.md`](./Project/EvidenceIndex.md).
 >
-> **v2.1 patch summary**: evidence-gating made explicit across reward + new scenarios (ADR-13); ambiguous-incident discoverability tweak folded into Issue #19; new Issue #21 adds `GET /benchmark` (ADR-14). Critique items #1, #2, #3, #6, #9 already covered in v2; #8 (composite GRPO reward) deliberately not changed -- TRL already consumes `observation.reward: float`.
+> **v3.0 patch summary**: Phase 14 collapses Phases 11–13 of v2.1 into a single MissionOps push driven by the `FlawsToProduction/` audit. Old Issues #1–#21 are superseded (closed/folded). New issues `#22 → #38` are owner-mapped 6/6/6 across Architect / TechLead / SDE; `#39` is the tracker that gates submission.
 
 ---
 
-## Decisions (Locked) -- see `Project/DecisionLog.md` for full ADRs
+## 1. Decisions locked (v3.0) — see `Project/DecisionLog.md`
 
-| #   | Decision      | Answer                                                                    | ADR       |
-| --- | ------------- | ------------------------------------------------------------------------- | --------- |
-| 1   | Scope         | Mega-incident + Memory + Procedural. Drop scattered-instructions.         | ADR-07    |
-| 2   | Compute       | Inference-first evidence NOW. Request HF credits in parallel.             | ADR-08    |
-| 3   | Pitch         | Merged: lead memory, close with process-aware reward.                     | ADR-09    |
-| 4   | Concurrency   | `SessionManager` + `X-Session-Id`; no module singletons.                  | ADR-04    |
-| 5   | Memory        | Explicit `save_finding` / `recall_memory` + step-30 cutoff.               | ADR-05/06 |
-| 6   | Review policy | Guna<->Gokul reciprocal; SDE PRs reviewed by both leads + auto PR review. | ADR-11    |
-| 7   | Evidence gating | `remediation.*` events score 0 across all scenarios until `_root_cause_identified` is True. | ADR-13 |
-| 8   | Benchmark surface | Add `GET /benchmark` reading `docs/baseline_scores.md` (Issue #21).                       | ADR-14 |
-
----
-
-## The Pitch (30 seconds, verbatim) -- see `Demo/Narrative.md` for the full beat sheet
-
-> "Production incidents can take 4-6 hours. Current AI agents fail at step 30 because their context fills up with noise. Praxis forces the agent to manage its own memory -- save the important finding, discard the noise, recall what matters when you need it. After step 30, the full log is gone. Only what you chose to remember remains. And we reward the agent for thinking correctly through the whole trajectory, not just solving the final step."
+| #   | Decision                       | Answer                                                                                            | ADR    |
+| --- | ------------------------------ | ------------------------------------------------------------------------------------------------- | ------ |
+| 1   | Theme angle                    | MissionOps — long-horizon SRE missions with planning, memory, and recovery as first-class skills. | ADR-16 |
+| 2   | Real-world data                | Rootly AI Labs `logs-dataset` vendored into `data/artifacts/` with Apache-2.0 NOTICE.             | ADR-17 |
+| 3   | Reward decomposition           | 4 composable rubrics — Planning 0.20, Memory 0.20, Recovery 0.20, Terminal 0.40 — sum to 1.0.     | ADR-18 |
+| 4   | Training pipeline              | Unsloth GRPO + multi-turn GRPO (mtGRPO) over the live env via TRL `environment_factory`.          | ADR-19 |
+| 5   | Final score formula            | `task_score = outcome × efficiency`, `efficiency = max(0.4, 1 − steps_used/MAX_STEPS)` clipped.   | ADR-20 |
+| 6   | Concurrency                    | `asyncio.Lock`, session TTL 900 s, slowapi rate-limit 60/min on `/step` + `/reset`.               | ADR-04 + Mistake-4 |
+| 7   | Memory                         | Explicit `save_finding` / `recall_memory` + per-scenario step cutoff.                              | ADR-05/06 |
+| 8   | Evidence gating                | `remediation.*` events score 0 until root cause is identified.                                     | ADR-13 |
+| 9   | Benchmark surface              | `GET /benchmark` reads `docs/baseline_scores.md` (4-row score gap table).                          | ADR-14 |
+| 10  | Review policy                  | Architect ↔ TechLead reciprocal review; SDE PRs reviewed by both leads via `auto-review.yml`.     | ADR-11 |
 
 ---
 
-## Architecture index (rebuilt under `idea/Plan/Architecture/`)
+## 2. The pitch (60 seconds, MissionOps cut) — `Demo/Narrative.md`
 
-| Doc                                                         | Purpose                                                                                |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| [`APIContract.md`](./Architecture/APIContract.md)           | Endpoints, schemas, X-Session-Id header, field-parity rules.                           |
-| [`DataFlow.md`](./Architecture/DataFlow.md)                 | End-to-end sequence diagrams: reset, step (memory branch), reward, episode terminator. |
-| [`ConcurrencyModel.md`](./Architecture/ConcurrencyModel.md) | SessionManager, lock, LRU eviction, OpenEnv parity flags.                              |
-| [`MemoryModel.md`](./Architecture/MemoryModel.md)           | `PraxisMemory` class, cutoff, save/recall semantics, reward integration.               |
-| [`ScenarioCatalog.md`](./Architecture/ScenarioCatalog.md)   | All 6 tasks (4 shipping + mega + procedural).                                          |
-| [`RewardPolicy.md`](./Architecture/RewardPolicy.md)         | Per-task event tables + cross-task memory bonus row.                                   |
-| [`SessionLifecycle.md`](./Architecture/SessionLifecycle.md) | Reset/step/done/eviction state machine.                                                |
+> "Production incidents take 4–6 hours. Today's agents fail at long-horizon SRE work because their context fills with noise, they don't plan, and they don't recover from disturbances. Praxis MissionOps is an OpenEnv where the agent runs an 8-phase production failure with scattered instructions, hidden dependencies, and real Rootly logs — earning credit for planning, recovery, and memory through four composable rubrics, not just for fixing the final symptom. Our trained Qwen agent jumps from a 0.18 baseline to 0.74 — a 4.1× lift — and the rollout shows it actually re-plans when we inject a disturbance. That's MissionOps: long-horizon, process-aware, and grounded in real production data."
 
 ---
 
-## Evidence Index (full: `Project/EvidenceIndex.md`)
+## 3. Architecture index (under `idea/Plan/Architecture/`)
 
-| ID  | Source                                 | Why                                                                      |
-| --- | -------------------------------------- | ------------------------------------------------------------------------ |
-| S1  | Meta engineer venue statement          | "Used in PyTorch right away"; "Anthropic trains next model on it".       |
-| S2  | External Themes & Judging Criteria     | 40/30/20/10 weights.                                                     |
-| S3  | How Judging Works                      | Phase 1 auto gates; vCPU=2/8GB; <20 min runtime.                         |
-| S9  | `server/app.py:46`                     | Global env singleton -- the concurrency blocker.                         |
-| S14 | OpenEnv `interfaces.py`                | `Environment` ABC, `SUPPORTS_CONCURRENT_SESSIONS`, Rubric.               |
-| S16 | OpenEnv `cli/templates/.../app.py`     | `create_app(..., max_concurrent_envs=N)` factory.                        |
-| S26 | Theme #2 description                   | "Beyond context memory limits".                                          |
-| S28 | arxiv AgeMem                           | Memory ops as tool-based GRPO actions.                                   |
-| S29 | arxiv 2601.07190                       | Context Bloat -- passive summarisation fails.                            |
-| S30 | GRPO survey                            | Process rewards > terminal rewards.                                      |
-| S31 | How Judging Works (mandatory env vars) | API_BASE_URL, MODEL_NAME, HF_TOKEN; OpenAI client; inference.py at root. |
-
-Full mapping in [`Project/EvidenceIndex.md`](./Project/EvidenceIndex.md).
+| Doc                                                            | Purpose                                                                                              |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [`APIContract.md`](./Architecture/APIContract.md)              | Endpoints, schemas, X-Session-Id, MissionOps fields, planning commands, `/metadata`, `/benchmark`.   |
+| [`DataFlow.md`](./Architecture/DataFlow.md)                    | End-to-end sequences: reset, step, planning actions, reward composition, live training loop.        |
+| [`ConcurrencyModel.md`](./Architecture/ConcurrencyModel.md)    | `asyncio.Lock`, session TTL, slowapi, OpenEnv parity flags.                                          |
+| [`MemoryModel.md`](./Architecture/MemoryModel.md)              | `PraxisMemory`, save/recall, per-scenario cutoff %, MemoryRubric link.                               |
+| [`ScenarioCatalog.md`](./Architecture/ScenarioCatalog.md)      | All scenarios; `cascading-platform-failure` rewritten as the MissionOps mega-mission.                |
+| [`RewardPolicy.md`](./Architecture/RewardPolicy.md)            | Composable rubrics, weights, outcome × efficiency formula, audit checklist.                          |
+| [`SessionLifecycle.md`](./Architecture/SessionLifecycle.md)    | Reset / step / done / TTL eviction state machine.                                                    |
 
 ---
 
-## Phased delivery plan (extends the original Phases 1-10)
+## 4. Evidence index (full: `Project/EvidenceIndex.md` S1 → S40)
 
-> Phases 1-10 are complete (4 shipping tasks, 289 tests, Docker/HF Space, inference.py). Phases 11-13 add the Theme #2 finale.
+Anchors that drive Plan v3.0:
 
-### Phase 11 -- Memory + Concurrency Foundation (Issues #1-#6)
+- **S2 / S3** — Judging weights 40/30/20/10; vCPU=2 / 8 GB; runtime < 20 min.
+- **S26** — Theme #2 "beyond context memory limits" framing.
+- **S30** — GRPO survey: process rewards > terminal rewards.
+- **S33** — Rootly AI Labs `logs-dataset` (Apache-2.0).
+- **S34** — SRE-skills-bench taxonomy for planning + recovery.
+- **S35** — Unsloth GRPO + mtGRPO recipes.
+- **S36** — UltraHorizon failure modes (planning, recovery, instruction adherence).
+- **S37** → **S40** — `FlawsToProduction/` audit memos (Mistakes 1–7, MissionOps mandate, Rootly mandate, training pipeline mandate).
 
-**Goal**: Sessions work in parallel; `PraxisMemory` is wired into reset/step/observation/reward across all task policies.
+---
 
-**Deliverables**:
+## 5. Phase 14 — MissionOps push (Plan v3.0)
 
-- `server/app.py` -> `SessionManager` (Issue #1).
-- `praxis_env/models.py` -> memory-aware `PraxisObservation` + `PraxisState` (Issue #2).
-- `praxis_env/memory.py` -> new (Issue #3).
-- `server/command_parser.py` -> `save_finding` / `recall_memory` (Issue #4).
-- `server/reward.py` -> `_with_memory_events` helper applied to every policy (Issue #5).
-- `server/praxis_environment.py` -> memory hook + cutoff observation rewrite (Issue #6).
+> Phases 1–13 are sealed (audit findings folded into the issue body of `#22`). Phase 14 is one wave, three lanes, six waves of work on the wall clock. Issue ↔ wave mapping is the single source of truth for delivery.
 
-**Validation**:
+### 5.1 Lanes
 
-- [ ] `pytest -q` still 289+ green.
-- [ ] `tests/test_concurrent_sessions.py` (Issue #15) passes.
-- [ ] `tests/test_memory.py` (Issue #13) passes.
+| Lane                              | Issues                       | Total |
+| --------------------------------- | ---------------------------- | ----- |
+| **Architect** (`@GunaPalanivel`)  | #22, #23, #24, #37, #38, #39 | 6     |
+| **TechLead** (`@Gokul287`)        | #25, #26, #27, #31, #32, #33 | 6     |
+| **SDE** (`@snehasneha56526-arch`) | #28, #29, #30, #34, #35, #36 | 6     |
+
+### 5.2 Waves and deliverables
+
+#### Wave 0 — Safety + correctness foundation (T+0 → T+1h)
+
+- `#22` *Safety bundle*: replace `threading.Lock` → `asyncio.Lock`, add slowapi rate-limit (60/min on `/step` + `/reset`), uvicorn `CMD ["uvicorn",...,"--host","0.0.0.0","--port","7860"]`, raise success thresholds out of triviality (`server/reward.py` policy adjust).
+- **Validation**: `pytest -q` 289+ green, `tests/test_concurrent_sessions.py` PASS, `tests/test_rate_limit.py` PASS, `openenv validate` PASS.
+
+#### Wave 1 — Reward foundation (T+1h → T+2h)
+
+- `#23` *Outcome × efficiency score*: implement `compute_task_score(outcome, steps_used, max_steps)` in `praxis_env/scoring.py`, expose in `/state.task_score`, fail tests if formula drifts.
+- `#25` design phase started in parallel.
+
+#### Wave 2 — Composable rubrics + planning skeleton (T+2h → T+4h)
+
+- `#24` *Composable Rubrics*: refactor `server/reward.py` into `rubrics/{planning,memory,recovery,terminal}.py`; engine asserts weights sum to 1.0 ±1e-6.
+- `#25` *MissionPlan + planning actions*: add `praxis_env/mission_plan.py`, wire `create_plan` / `revise_plan` / `checkpoint` / `submit_report` / `request_clarification` through `command_parser.py` and `praxis_environment.py`.
+
+#### Wave 3 — MissionOps + manifest (T+4h → T+6h)
+
+- `#26` *MissionScenario phases + scattered + recovery*: rewrite `praxis_env/scenarios/cascading_platform_failure.py` as 8-phase mega-mission with scattered instructions, hidden dependencies, and disturbance injection.
+- `#29` *openenv.yaml + `/metadata`*: refresh manifest (rubric weights, data sources block) and `GET /metadata`.
+- `#30` *3-row baseline scores*: produce `docs/baseline_scores.md` (random / no-memory / SRE-prompt) over 4 scenarios × 5 seeds.
+
+#### Wave 4 — Real-data + memory-leak excerpts + tests (T+6h → T+8h)
+
+- `#27` *ArtifactStore + Rootly vendoring*: implement `praxis_env/artifacts.py`, vendor sample under `data/artifacts/` with `LICENSE-3rd-party.md` + `NOTICE.md`.
+- `#28` *memory-leak + Rootly excerpts*: inject runbook/log excerpts via `ArtifactStore` into the `memory-leak` scenario; reward credit only when content is recalled across the cutoff.
+- `#34` *Test suite — rubrics + artifacts + mission*: add `tests/test_rubrics.py`, `tests/test_mission_scenario_phases.py`, `tests/test_artifacts.py`, `tests/test_planning_actions.py`, `tests/test_score_formula.py`.
+
+#### Wave 5 — Trainer + receipts + benchmark (T+8h → T+11h)
+
+- `#31` *`scripts/train_praxis_grpo.py`*: Unsloth + TRL `environment_factory` with multi-turn GRPO turn aggregator, parallel sessions, Trackio/WandB logging.
+- `#35` *Determinism + runtime + resource receipts*: `tests/test_determinism.py` (5-seed reproducibility), `docs/runtime_receipt.md` (< 20 min on vCPU=2/8 GB), `docs/resource_receipt.md`.
+- `#36` *`GET /benchmark`*: read `docs/baseline_scores.md`, return JSON; happy path + missing-file + extra-fields tests.
+
+#### Wave 6 — Training run + rollout + Space (T+11h → T+13h)
+
+- `#32` *Training run + curves + 4th baseline row*: capture `docs/loss_curve.png` + `docs/reward_curve.png`; append the trained-Qwen row to `docs/baseline_scores.md` (the 4-row gap table).
+- `#33` *Before/after rollout — trophy moment*: `docs/rollout_before.md` + `docs/rollout_after.md` from real `/step` traces; same seed; show ≥ 4× lift on the MissionOps mega-mission.
+- `#37` *HF Space + smoke + Dockerfile prod*: pin `requirements.txt`, ship Dockerfile (uvicorn CMD), deploy Space, `tests/smoke_test.py` green from cold start.
+
+#### Wave 7 — README + demo + submission (T+13h → T+15h)
+
+- `#38` *README + mini-blog + slide deck + video*: link block (Space `/health` `/metadata` `/benchmark`, training links, baseline scores, rollouts, evidence package); ≤ 2 min video.
+- `#39` *Submission tracker* — flip the 20-item judge checklist green under each of the four weighted axes (40/30/20/10), then submit.
+
+### 5.3 Critical path (must not slip)
+
+```
+#22 → #24 → #25 → #26 → #31 → #32 → #33 → #38 → #39
+```
+
+Detailed wall-clock and parallel lanes: [`dependency_graph.md`](./dependency_graph.md) §3–§4. T-task names per wave: [`task.md`](./task.md). Risk register: [`dependency_graph.md`](./dependency_graph.md) §5.
+
+---
+
+## 6. T+0 → T+15h schedule (single-screen view)
+
+```
+T+0:00  Wave 0  #22 Safety bundle .................................. 60 min  [Architect]
+T+1:00  Wave 1  #23 Score formula ................................. 60 min  [Architect] || #25 design starts [TechLead]
+T+2:00  Wave 2  #24 Rubrics ........................................ 90 min  [Architect]
+                #25 MissionPlan + planning actions ................. 90 min  [TechLead]
+T+4:00  Wave 3  #26 MissionScenario ............................... 120 min  [TechLead]
+                #29 openenv.yaml + /metadata ....................... 60 min  [SDE]
+                #30 baseline 3-row scores .......................... 90 min  [SDE]
+T+6:00  Wave 4  #27 ArtifactStore + Rootly ......................... 90 min  [TechLead]
+                #28 memory-leak + Rootly excerpts .................. 60 min  [SDE]
+                #34 Test suite ..................................... 90 min  [SDE]
+T+8:00  Wave 5  #31 train_praxis_grpo.py .......................... 120 min  [TechLead]
+                #35 Determinism + runtime + resource ............... 60 min  [SDE]
+                #36 GET /benchmark ................................. 45 min  [SDE]
+T+11:00 Wave 6  #32 Training run + curves + 4th row ............... 120 min  [TechLead]
+                #33 Before/after rollout — trophy .................. 60 min  [TechLead]
+                #37 HF Space + smoke + Dockerfile prod ............. 90 min  [Architect]
+T+13:00 Wave 7  #38 README + blog + slides + video ................ 120 min  [Architect]
+                #39 Submission tracker (20-item checklist) ......... 45 min  [Architect]
+T+15:00 Submit (frozen commit)
+```
+
+Buffer is built into each wave (~30 min each). If GPU credits do not arrive, drop `#32`/`#33` to `#30` 3-row gap (still covers ~70% of the reward axis per S30) and document the fallback in the README.
+
+---
+
+## 7. Submission gates (mirror `Submission/SubmissionChecklist.md`)
+
+The 20-item judge checklist groups into 4 weighted axes:
+
+- **Environment Innovation (40%)** — MissionOps mega-mission, real Rootly artifacts, scattered instructions, hidden dependencies, disturbance injection, planning actions, composable rubrics, evidence-gated remediation.
+- **Storytelling & Presentation (30%)** — README MissionOps headline, 5-sentence pitch, ≤ 2 min video, slide deck, before/after rollout trophy, mini-blog.
+- **Reward Improvement (20%)** — Outcome × efficiency formula, baseline 4-row gap table, training curves, per-rubric attribution chart.
+- **Reward & Training Pipeline (10%)** — `scripts/train_praxis_grpo.py` checked in, training run logs linked, mtGRPO multi-turn credit assignment, runtime + resource receipts.
+
+Auto-validation gates (must be green):
+
+- [ ] `pytest -q` ≥ 350 green (rubrics, artifacts, mission, planning, score, determinism, smoke).
 - [ ] `uv run openenv validate` PASS.
-
-### Phase 12 -- New Scenarios + Training Evidence (Issues #7-#12)
-
-**Goal**: Mega-incident + procedural generator land; SRE-prompt baseline + GRPO script (and curve, if credits) provide the 20% rewards-criterion proof.
-
-**Deliverables**:
-
-- `praxis_env/scenarios/mega_incident.py` (Issue #7).
-- `praxis_env/scenarios/procedural_incident.py` (Issue #8).
-- `praxis_env/scenarios/__init__.py` + `openenv.yaml` registry (Issue #9).
-- `inference.py` SRE prompt + `docs/baseline_scores.md` (Issue #10).
-- `train_praxis_grpo.py` with TRL `environment_factory` + Trackio (Issue #11).
-- `docs/reward_curve.png` (Issue #12, if HF credits arrive).
-
-**Validation**:
-
-- [ ] All 6 tasks reachable via `/reset` with valid initial observations.
-- [ ] Score gap >= 5x between random baseline and SRE-prompted Qwen.
-- [ ] Training script syntactically correct; runs end-to-end on Colab T4 if a curve is captured.
-
-### Phase 13 -- Submission Package (Issues #13-#21)
-
-**Goal**: Tests, validation, deploy, README, demo, mini-blog, slides, benchmark surface -- everything Issue #20 needs to click submit.
-
-**Deliverables**:
-
-- `tests/test_memory.py`, `tests/test_task5_mega_incident.py`, `tests/test_task6_procedural.py`, `tests/test_concurrent_sessions.py` (Issues #13-#15) -- including the new `test_remediation_before_diagnosis_scores_zero` evidence-gate tests (ADR-13).
-- `tests/smoke_test.py` (Issue #16).
-- Full server validation script (Issue #17).
-- Updated Dockerfile + HF Space deploy (Issue #18).
-- README rewrite + ambiguous-incident discoverability tweak (Issue #19).
-- Demo Narrative + ScreenplayScript + mini-blog/video + slides (Issue #20).
-- `GET /benchmark` endpoint reading `docs/baseline_scores.md` (Issue #21, ADR-14).
-
-**Validation**:
-
-- [ ] `tests/smoke_test.py` PASS.
-- [ ] `tests/test_api_benchmark.py` PASS (3 cases: happy path, missing file, extra-fields rejection).
-- [ ] HF Space `/health` and `/benchmark` 200 from a private window.
-- [ ] README link block resolves all URLs (including `/benchmark`).
-- [ ] 60-second pitch rehearsed by Gokul, timed.
+- [ ] HF Space `/health`, `/metadata`, `/benchmark` 200 from a cold private window.
+- [ ] `docs/baseline_scores.md` has 4 rows (random, no-memory, SRE-prompt, trained-Qwen) and the lift is ≥ 4× on the MissionOps mission.
+- [ ] Runtime < 20 min on vCPU=2 / 8 GB on `tests/smoke_test.py`.
 
 ---
 
-## Execution timeline (T+0 = blocker landed)
+## 8. PLAN READY
 
-```
-T+0:00  #1 Sessions (BLOCKER)                 -> 60 min
-T+1:00  #2 Schema (Guna lane)  || #7 Mega (Gokul lane)
-T+2:00  #3 Memory  || #7 cont. || #4 Parser (SDE)
-T+3:00  #6 Env hook || #8 Procedural || #5 Reward (SDE)
-T+4:00  #9 Registry/yaml (SDE) || #10 SRE prompt (Gokul)
-T+4:45  #11 GRPO script (Gokul) || #13 Memory tests (SDE)
-T+5:45  #12 Reward curve (Gokul, GPU permitting) || #14 Scenario tests (SDE) || #15 Concurrent tests (SDE)
-T+7:00  #16 Cleanup || #17 Server validation
-T+7:45  #18 Docker+HF deploy (Gokul) + #21 GET /benchmark (Gokul tail) || #19 README rewrite (Guna)
-T+8:30  #20 Demo+blog+video+slides (Gokul)
-T+9:00  Submit (frozen commit)
-```
+All 17 implementation issues + 1 tracker are evidence-grounded, file-pathed, ADR-tagged, and lane-balanced. Proceed to:
 
-Critical path: 1 -> 3 -> 6 -> 7 -> 9 -> 17 -> 18 -> 19/20 (~9 h with buffer).
-
----
-
-## Minimum Submission Checklist (mirrors `Submission/SubmissionChecklist.md`)
-
-- [ ] OpenEnv (latest) used.
-- [ ] Training script (TRL) checked in.
-- [ ] Reward evidence (curve OR score gap table) committed under `docs/`.
-- [ ] Mini-blog OR ≤2 min video linked from README.
-- [ ] HuggingFace Space deployed and 200.
-- [ ] README explains problem, env, results in 3-5 minutes of reading.
-- [ ] `inference.py` at root with `[START]/[STEP]/[END]` contract.
-- [ ] 6 tasks with deterministic graders.
-- [ ] Rewards in (0.0, 1.0).
-- [ ] Runtime < 20 min on vCPU=2 / 8 GB.
-
----
-
-## PLAN READY
-
-All 21 issues are evidence-grounded, file-pathed, schema-backed, and review-policy-tagged. Proceed to `idea/Plan/github_issues.md` for full bodies and `idea/Plan/dependency_graph.md` for the wave plan.
+- [`github_issues.md`](./github_issues.md) for issue bodies (5-line acceptance template per issue).
+- [`dependency_graph.md`](./dependency_graph.md) for the DAG, lanes, critical path, wave timeline, and risk register.
+- [`task.md`](./task.md) for the T-task ledger mapped to issues `#22 → #39`.
+- [`Submission/SubmissionChecklist.md`](./Submission/SubmissionChecklist.md) for the 20-item judge checklist + tracker body.
+- [`issues_payload.md`](./issues_payload.md) for ready-to-paste `gh issue create` payloads.

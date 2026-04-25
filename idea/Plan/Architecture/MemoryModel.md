@@ -100,22 +100,26 @@ Why this is the moat (verbatim from `idea/Task.md` line 169):
 
 ---
 
-## 4. Reward integration (cross-link to `RewardPolicy.md`)
+## 4. Reward integration (cross-link to `RewardPolicy.md` §1 + §8)
 
-Memory events emit reward tags that every task policy maps to a number:
+Memory events emit reward tags read by **`MemoryRubric` (weight 0.20)** in the composable-rubric bundle (RewardPolicy §8, ADR-18). The 6 default magnitudes:
 
-| Event tag                            | Default value | Meaning                                     |
-| ------------------------------------ | ------------- | ------------------------------------------- |
-| `memory.save_finding.before_cutoff`  | +0.05         | Proactive: agent saved before pressure.     |
-| `memory.save_finding.after_cutoff`   | +0.02         | Reactive: still useful but late.            |
-| `memory.recall_memory.before_cutoff` | +0.01         | Tiny — discourages habitual recall.         |
-| `memory.recall_memory.after_cutoff`  | +0.08         | Strong: planning paid off.                  |
-| `memory.illegal_log_after_cutoff`    | −0.05         | Querying logs after cutoff (logs are gone). |
-| `memory.empty_recall_after_cutoff`   | −0.02         | Recall after cutoff with no saved findings. |
+| Event tag                            | Pre-weight value | Effective contribution at rubric weight 0.20 | Meaning                                     |
+| ------------------------------------ | ---------------- | -------------------------------------------- | ------------------------------------------- |
+| `memory.save_finding.before_cutoff`  | +0.05            | +0.010                                       | Proactive: agent saved before pressure.     |
+| `memory.save_finding.after_cutoff`   | +0.02            | +0.004                                       | Reactive: still useful but late.            |
+| `memory.recall_memory.before_cutoff` | +0.01            | +0.002                                       | Tiny — discourages habitual recall.         |
+| `memory.recall_memory.after_cutoff`  | +0.08            | +0.016                                       | Strong: planning paid off.                  |
+| `memory.illegal_log_after_cutoff`    | −0.05            | −0.010                                       | Querying logs after cutoff (logs are gone). |
+| `memory.empty_recall_after_cutoff`   | −0.02            | −0.004                                       | Recall after cutoff with no saved findings. |
 
-These are added to **every task's** `event_values` so the memory tools work for all scenarios. See [`RewardPolicy.md`](./RewardPolicy.md) for full per-task tables.
+Why the rubric weight matters: under the old monolithic engine, memory bonuses competed directly with diagnosis/remediation rewards. With composable rubrics, `MemoryRubric` always contributes exactly 20% of the total reward signal, so the gradient toward "use memory tools" is bounded and stable across tasks. `MemoryRubric.score(trajectory)` returns a value in `[-1.0, 1.0]` before the 0.20 multiplier; the table above uses the **default unit values** `MemoryRubric` produces from each event tag.
 
-Cross-link: ADR-13 additionally enforces an evidence gate where `remediation.*` scores are zeroed until root-cause diagnosis is confirmed, preventing memory-assisted reward hacking before diagnosis.
+Cross-links:
+
+- **ADR-13** enforces an evidence gate where `remediation.*` scores are zeroed until root-cause diagnosis is confirmed, preventing memory-assisted reward hacking.
+- **ADR-18** routes these events through `MemoryRubric` rather than `DEFAULT_REWARD_POLICIES.event_values`. Existing per-task `event_values` lists kept for backwards compat but become an input layer to the rubric.
+- **ADR-20** (outcome × efficiency) means saved findings only convert to final score if the agent ultimately resolves the incident. Memory bonuses inflate `cumulative_reward` per-turn but the score is gated on `_incident_resolved AND _root_cause_identified`.
 
 ---
 
@@ -173,18 +177,18 @@ even before the memory hook rewrites `investigation_result`; `memory_active=fals
 
 ## 8. Per-scenario overrides
 
-| Task                           | `CONTEXT_CUTOFF_STEP`                | Rationale                                   |
-| ------------------------------ | ------------------------------------ | ------------------------------------------- |
-| `single-service-alert`         | 30 (default — never reached, max=15) | No-op for short tasks.                      |
-| `ambiguous-incident`           | 30 (rarely reached, max=25)          | Memory tools available but not pressured.   |
-| `cascading-failure`            | 30 (rarely reached, max=20)          | Same.                                       |
-| `memory-leak`                  | 20                                   | Forces use; max_steps=25.                   |
-| `cascading-platform-failure`   | 30                                   | The headline: 120-step task, cutoff at 25%. |
-| `procedural-incident` (easy)   | 8                                    | Auto-calibrated by difficulty.              |
-| `procedural-incident` (medium) | 15                                   |                                             |
-| `procedural-incident` (hard)   | 25                                   |                                             |
+| Task                           | `MAX_STEPS` | `CONTEXT_CUTOFF_STEP` | Cutoff as % of MAX_STEPS | Rationale                                          |
+| ------------------------------ | ----------- | --------------------- | ------------------------ | -------------------------------------------------- |
+| `single-service-alert`         | 15          | 30 (n/a, never hit)   | n/a                      | Memory tools available; no pressure on short task. |
+| `ambiguous-incident`           | 25          | 30 (rarely hit)       | n/a                      | Memory tools available; no pressure.               |
+| `cascading-failure`            | 20          | 30 (rarely hit)       | n/a                      | Same.                                              |
+| `memory-leak`                  | 25          | 20                    | 80%                      | Forces use; agent must save heap-growth obs by 20. |
+| `cascading-platform-failure` (MissionOps) | 150 | 30                | 20%                      | Long mission; cutoff aligned with severity escalation P1→P0. |
+| `procedural-incident` (easy)   | 15          | 8                     | 53%                      | Auto-calibrated by difficulty.                     |
+| `procedural-incident` (medium) | 25          | 15                    | 60%                      |                                                    |
+| `procedural-incident` (hard)   | 50          | 25                    | 50%                      |                                                    |
 
-The `PraxisEnvironment` reads cutoff from `scenario.MEMORY_CUTOFF_OVERRIDE` if defined, else falls back to the `PraxisMemory` class constant.
+The `PraxisEnvironment` reads cutoff from `scenario.MEMORY_CUTOFF_OVERRIDE` if defined, else falls back to the `PraxisMemory` class constant (default 30). Validated by `tests/test_memory.py::test_per_scenario_cutoff_overrides` (Issue #34).
 
 ---
 
