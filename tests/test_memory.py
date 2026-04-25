@@ -20,7 +20,9 @@ def test_recall_specific_key():
 
 def test_recall_unknown_key_returns_helpful_message():
     memory = PraxisMemory(saved_findings={"root_cause": "bad_config"})
-    assert memory.recall_memory("missing_key") == "No saved finding for key: missing_key"
+    assert (
+        memory.recall_memory("missing_key") == "No saved finding for key: missing_key"
+    )
 
 
 def test_recall_all_returns_deterministic_sorted_lines():
@@ -43,7 +45,9 @@ def test_get_observation_context_pre_cutoff_returns_last_ten_entries():
 
 
 def test_get_observation_context_post_cutoff_returns_banner_and_findings():
-    memory = PraxisMemory(saved_findings={"db_pool": "exhausted"}, CONTEXT_CUTOFF_STEP=30)
+    memory = PraxisMemory(
+        saved_findings={"db_pool": "exhausted"}, CONTEXT_CUTOFF_STEP=30
+    )
 
     context = memory.get_observation_context(full_log=["ignored"], step=30)
 
@@ -69,7 +73,9 @@ def test_reset_clears_saved_findings():
 
 
 def test_determinism_same_inputs_same_output_bytes():
-    memory = PraxisMemory(saved_findings={"alpha": "1", "beta": "2"}, CONTEXT_CUTOFF_STEP=30)
+    memory = PraxisMemory(
+        saved_findings={"alpha": "1", "beta": "2"}, CONTEXT_CUTOFF_STEP=30
+    )
     full_log = [f"log_{i}" for i in range(20)]
 
     output_1 = memory.get_observation_context(full_log=full_log, step=35)

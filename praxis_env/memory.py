@@ -31,7 +31,10 @@ class PraxisMemory:
         if not self.saved_findings:
             return "No findings saved."
 
-        lines = [f"{saved_key}: {self.saved_findings[saved_key]}" for saved_key in sorted(self.saved_findings)]
+        lines = [
+            f"{saved_key}: {self.saved_findings[saved_key]}"
+            for saved_key in sorted(self.saved_findings)
+        ]
         return "\n".join(lines)
 
     def get_observation_context(self, full_log: list[str], step: int) -> str:
