@@ -146,6 +146,11 @@ class PraxisObservation(BaseModel):
     step_number: int
     memory_active: bool = False
     saved_findings_count: int = 0
+    # Mission-aware fields (Issue #36 / #37)
+    mission_id: str | None = None
+    phase: str | None = None
+    time_budget: int | None = None
+    pending_objectives: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def normalize_text(self) -> "PraxisObservation":
@@ -190,6 +195,12 @@ class PraxisState(BaseModel):
     session_id: str = ""
     memory_active: bool = False
     final_score: float | None = None
+    # Mission-aware fields (Issue #36 / #37)
+    mission_id: str | None = None
+    phase: str | None = None
+    plan: list[str] = Field(default_factory=list)
+    checkpoints_completed: list[str] = Field(default_factory=list)
+    artifact_attribution: list[str] = Field(default_factory=list)
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -211,6 +222,14 @@ AVAILABLE_COMMANDS: list[str] = [
     "save_finding key=<key> value=<finding>",
     "recall_memory",
     "recall_memory key=<key>",
+    # Planning surface (Issue #36)
+    "create_plan milestones=<m1,m2,m3,...>",
+    "revise_plan replace=<old> with=<new>",
+    "revise_plan add=<new>",
+    "revise_plan remove=<old>",
+    "checkpoint milestone=<name>",
+    "submit_report root_causes=<c1,c2> resolution=<text>",
+    "request_clarification topic=<service|artifact|next>",
 ]
 
 VALID_METRICS: frozenset[str] = frozenset(

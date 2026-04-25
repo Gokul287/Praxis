@@ -12,6 +12,11 @@ Special cases:
     - save_finding: key=<key> value=<free text with spaces>
     - diagnose:  root_cause=<value with underscores or hyphens>
     - timerange: value like "5m", "15m" (kept as-is, not parsed to int)
+    - create_plan: milestones=<comma-separated list, may contain spaces>
+    - revise_plan: replace=<old> with=<new> | add=<new> | remove=<old>
+    - checkpoint: milestone=<free text with spaces>
+    - submit_report: root_causes=<comma list> resolution=<free text>
+    - request_clarification: topic=<single token>
 
 Usage:
     cmd = parse_command("query_logs service=auth timerange=5m")
@@ -40,7 +45,18 @@ KNOWN_ACTIONS: frozenset[str] = frozenset(
         "escalate",
         "save_finding",
         "recall_memory",
+        # Planning surface (Issue #36)
+        "create_plan",
+        "revise_plan",
+        "checkpoint",
+        "submit_report",
+        "request_clarification",
     }
+)
+
+# Action types that planning rubric attributes credit to.
+PLANNING_ACTIONS: frozenset[str] = frozenset(
+    {"create_plan", "revise_plan", "checkpoint", "submit_report"}
 )
 
 
@@ -112,6 +128,56 @@ def parse_command(raw: str) -> ParsedCommand:
         else:
             # Let environment-side validation reject malformed payloads
             params = {}
+        return ParsedCommand(action_type=action_type, params=params, raw=raw)
+
+    # Special case: create_plan milestones=<comma list, may contain spaces>
+    if action_type == "create_plan":
+        match = re.search(r"milestones=(.+)$", remainder, re.IGNORECASE)
+        if match:
+            raw_value = match.group(1).strip().strip("'\"")
+            milestones = [m.strip() for m in raw_value.split(",") if m.strip()]
+            if milestones:
+                params["milestones"] = ",".join(milestones)
+        return ParsedCommand(action_type=action_type, params=params, raw=raw)
+
+    # Special case: revise_plan {replace=<old> with=<new> | add=<new> | remove=<old>}
+    if action_type == "revise_plan":
+        replace_match = re.search(
+            r"replace=(.+?)\s+with=(.+)$", remainder, re.IGNORECASE
+        )
+        if replace_match:
+            params["replace"] = replace_match.group(1).strip().strip("'\"")
+            params["with"] = replace_match.group(2).strip().strip("'\"")
+            return ParsedCommand(action_type=action_type, params=params, raw=raw)
+        add_match = re.search(r"add=(.+)$", remainder, re.IGNORECASE)
+        if add_match:
+            params["add"] = add_match.group(1).strip().strip("'\"")
+            return ParsedCommand(action_type=action_type, params=params, raw=raw)
+        remove_match = re.search(r"remove=(.+)$", remainder, re.IGNORECASE)
+        if remove_match:
+            params["remove"] = remove_match.group(1).strip().strip("'\"")
+            return ParsedCommand(action_type=action_type, params=params, raw=raw)
+        return ParsedCommand(action_type=action_type, params=params, raw=raw)
+
+    # Special case: checkpoint milestone=<free text>
+    if action_type == "checkpoint":
+        match = re.search(r"milestone=(.+)$", remainder, re.IGNORECASE)
+        if match:
+            params["milestone"] = match.group(1).strip().strip("'\"")
+        return ParsedCommand(action_type=action_type, params=params, raw=raw)
+
+    # Special case: submit_report root_causes=<comma list> resolution=<free text>
+    if action_type == "submit_report":
+        # root_causes is required; resolution is optional and consumes the tail
+        rc_match = re.search(
+            r"root_causes=([^\s]+)(?:\s+resolution=(.+))?$",
+            remainder,
+            re.IGNORECASE,
+        )
+        if rc_match:
+            params["root_causes"] = rc_match.group(1).strip().strip("'\"")
+            if rc_match.group(2):
+                params["resolution"] = rc_match.group(2).strip().strip("'\"")
         return ParsedCommand(action_type=action_type, params=params, raw=raw)
 
     # Standard key=value parsing for all other commands

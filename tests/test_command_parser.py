@@ -150,6 +150,67 @@ class TestParseCommand:
         cmd = parse_command(raw)
         assert cmd.raw == raw
 
+    # ── Planning surface (Issue #36) ──────────────────────────────────────────
+
+    def test_create_plan_basic(self):
+        cmd = parse_command("create_plan milestones=triage,diagnose,remediate")
+        assert cmd.action_type == "create_plan"
+        assert cmd.params["milestones"] == "triage,diagnose,remediate"
+
+    def test_create_plan_with_spaces_in_milestones(self):
+        cmd = parse_command(
+            "create_plan milestones=isolate auth,run runbook,roll back deploy"
+        )
+        assert cmd.action_type == "create_plan"
+        assert (
+            cmd.params["milestones"]
+            == "isolate auth,run runbook,roll back deploy"
+        )
+
+    def test_create_plan_missing_value(self):
+        cmd = parse_command("create_plan milestones=")
+        assert cmd.action_type == "create_plan"
+        assert "milestones" not in cmd.params
+
+    def test_revise_plan_replace(self):
+        cmd = parse_command("revise_plan replace=triage with=isolate-blast-radius")
+        assert cmd.action_type == "revise_plan"
+        assert cmd.params == {"replace": "triage", "with": "isolate-blast-radius"}
+
+    def test_revise_plan_add(self):
+        cmd = parse_command("revise_plan add=quarantine-host")
+        assert cmd.action_type == "revise_plan"
+        assert cmd.params == {"add": "quarantine-host"}
+
+    def test_revise_plan_remove(self):
+        cmd = parse_command("revise_plan remove=triage")
+        assert cmd.action_type == "revise_plan"
+        assert cmd.params == {"remove": "triage"}
+
+    def test_checkpoint_with_spaces(self):
+        cmd = parse_command("checkpoint milestone=isolate blast radius")
+        assert cmd.action_type == "checkpoint"
+        assert cmd.params == {"milestone": "isolate blast radius"}
+
+    def test_submit_report_with_resolution(self):
+        cmd = parse_command(
+            "submit_report root_causes=db_pool,leaked_creds resolution=rotate keys"
+        )
+        assert cmd.action_type == "submit_report"
+        assert cmd.params["root_causes"] == "db_pool,leaked_creds"
+        assert cmd.params["resolution"] == "rotate keys"
+
+    def test_submit_report_without_resolution(self):
+        cmd = parse_command("submit_report root_causes=db_pool")
+        assert cmd.action_type == "submit_report"
+        assert cmd.params["root_causes"] == "db_pool"
+        assert "resolution" not in cmd.params
+
+    def test_request_clarification_topic(self):
+        cmd = parse_command("request_clarification topic=service")
+        assert cmd.action_type == "request_clarification"
+        assert cmd.params == {"topic": "service"}
+
 
 class TestIsKnownAction:
     def test_known_actions(self):
@@ -166,6 +227,11 @@ class TestIsKnownAction:
             "escalate",
             "save_finding",
             "recall_memory",
+            "create_plan",
+            "revise_plan",
+            "checkpoint",
+            "submit_report",
+            "request_clarification",
         ]
         for action in known:
             assert is_known_action(action), f"{action} should be known"
