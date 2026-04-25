@@ -179,11 +179,12 @@ class PraxisEnvironment:
         # Parse command string -> structured ParsedCommand
         parsed = parse_command(action.command)
         current_step = self._scenario._step_count
-        cutoff_active = self._memory.is_active(current_step)
         reward_event: str | None = None
 
         if parsed.action_type in {"save_finding", "recall_memory"}:
-            outcome, reward_event = self._handle_memory_action(parsed.action_type, parsed.params)
+            outcome, reward_event = self._handle_memory_action(
+                parsed.action_type, parsed.params
+            )
         elif (
             parsed.action_type in {"query_logs", "check_logs"}
             and current_step >= self._memory.CONTEXT_CUTOFF_STEP
