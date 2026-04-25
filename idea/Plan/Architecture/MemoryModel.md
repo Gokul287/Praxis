@@ -41,6 +41,8 @@ class PraxisMemory:
 
 ## 2. Lifecycle
 
+Status: shipped in Issue #6 (`PraxisEnvironment` now owns memory command routing and cutoff rewriting).
+
 ```mermaid
 sequenceDiagram
     participant E as PraxisEnvironment
@@ -48,7 +50,7 @@ sequenceDiagram
     participant SC as Scenario
 
     Note over E: reset()
-    E->>M: PraxisMemory()  (or M.reset())
+    E->>M: PraxisMemory()  (constructed once in __init__)
     E->>SC: scenario.reset(episode_id)
 
     loop each step
@@ -61,6 +63,10 @@ sequenceDiagram
             M-->>E: stored value(s)
         else scenario action
             E->>SC: step(parsed)
+        end
+        alt action in {query_logs, check_logs} and step >= cutoff
+            E->>E: emit memory.illegal_log_after_cutoff
+            E->>E: append [CONTEXT LIMIT] guardrail line
         end
         E->>M: get_observation_context(history, step)
         M-->>E: full log slice OR cutoff message
